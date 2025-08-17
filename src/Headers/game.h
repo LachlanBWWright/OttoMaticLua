@@ -211,6 +211,8 @@ extern	float					gTimeSinceLastThrust;
 extern	int						gGameWindowHeight;
 extern	int						gGameWindowWidth;
 extern	int						gLevelNum;
+extern	LevelOverrideType		gLevelOptions;
+extern	Boolean					gLevelOptionsOn;
 extern	int						gMaxEnemies;
 extern	int						gNumEnemies;
 extern	int						gNumEnemyOfKind[NUM_ENEMY_KINDS];

@@ -80,6 +80,9 @@ float				gLevelCompletedCoolDownTimer = 0;
 
 int					gLevelNum = 0;
 
+LevelOverrideType	gLevelOptions;
+Boolean				gLevelOptionsOn = false;
+
 short				gBestCheckpointNum;
 OGLPoint2D			gBestCheckpointCoord;
 float				gBestCheckpointAim;

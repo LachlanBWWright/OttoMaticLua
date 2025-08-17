@@ -126,7 +126,9 @@ void InitPlayersAtStartOfLevel(void)
 
 	gExitRocket = nil;
 
-	if (gLevelNum == LEVEL_NUM_SAUCER)							// scale down rocket for saucer level
+	if (gLevelOptionsOn && gLevelOptions.rocketScale != 0.0f)
+		gRocketScaleAdjust = gLevelOptions.rocketScale;
+	else if (gLevelNum == LEVEL_NUM_SAUCER)							// scale down rocket for saucer level
 		gRocketScaleAdjust = .4f;
 	else
 		gRocketScaleAdjust = 1.0f;
@@ -147,7 +149,9 @@ void InitPlayersAtStartOfLevel(void)
 
 	gPlayerInfo.invincibilityTimer = 0;
 
-	if ((gLevelNum == LEVEL_NUM_BLOBBOSS) ||				// player still has full fuel on Blob Boss from prev level
+	if (gLevelOptionsOn && gLevelOptions.startWithFullFuel)
+		gPlayerInfo.fuel = 1;
+	else if ((gLevelNum == LEVEL_NUM_BLOBBOSS) ||				// player still has full fuel on Blob Boss from prev level
 		(gLevelNum == LEVEL_NUM_JUNGLEBOSS))
 		gPlayerInfo.fuel = 1;
 	else

@@ -243,7 +243,8 @@ ObjNode	*playerObj = gPlayerInfo.objNode;
 
 	ResetCameraSettings();
 
-	if (gLevelNum == LEVEL_NUM_SAUCER)
+	if ((gLevelOptionsOn && gLevelOptions.useSaucerCamera) ||
+		(gLevelNum == LEVEL_NUM_SAUCER))
 	{
 		InitCamera_Saucer(playerObj);
 		return;
@@ -291,14 +292,16 @@ static void ResetCameraSettings(void)
 
 
 
-	if (gLevelNum == LEVEL_NUM_BLOBBOSS)			// keep camera high on blob boss level
+	if ((gLevelOptionsOn && gLevelOptions.useBlobBossCamera) ||
+		(gLevelNum == LEVEL_NUM_BLOBBOSS))			// keep camera high on blob boss level
 		gMinHeightOffGround = 400;
 	else
 		gMinHeightOffGround = 60;
 
 			/* SPECIAL SETTINGS FOR SAUCER LEVEL */
 
-	if (gLevelNum == LEVEL_NUM_SAUCER)
+	if ((gLevelOptionsOn && gLevelOptions.useSaucerCamera) ||
+		(gLevelNum == LEVEL_NUM_SAUCER))
 	{
 		gCameraLookAtAccel 	= 10;
 		gCameraHeightFactor = 0.6;
@@ -338,7 +341,8 @@ float			oldCamX,oldCamZ,oldCamY,oldPointOfInterestX,oldPointOfInterestZ,oldPoint
 	if (!playerObj)
 		return;
 
-	if (gLevelNum == LEVEL_NUM_SAUCER)
+	if ((gLevelOptionsOn && gLevelOptions.useSaucerCamera) ||
+		(gLevelNum == LEVEL_NUM_SAUCER))
 	{
 		MoveCamera_Saucer(playerObj);
 		return;
