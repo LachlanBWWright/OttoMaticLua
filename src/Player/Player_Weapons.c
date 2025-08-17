@@ -390,7 +390,8 @@ ObjNode	*newObj;
 		.rot		= 0,
 	};
 
-	if (gLevelNum == LEVEL_NUM_JUNGLE || gLevelNum == LEVEL_NUM_JUNGLEBOSS)
+	if ((gLevelOptionsOn && gLevelOptions.jungleWeaponMode) ||
+		(gLevelNum == LEVEL_NUM_JUNGLE || gLevelNum == LEVEL_NUM_JUNGLEBOSS))
 	{
 		// We do have a better model of the vial for those levels
 		def.group = MODEL_GROUP_LEVELSPECIFIC;

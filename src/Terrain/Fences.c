@@ -311,7 +311,11 @@ float					minX,minY,minZ,maxX,maxY,maxZ;
 			z = nubs[i].z;
 
 			y = nubs[i].y;
-			if ((gLevelNum != LEVEL_NUM_CLOUD)	&& (gLevelNum != LEVEL_NUM_SAUCER))		// dont sink in cloud or saucer - make flussh
+			if (gLevelOptionsOn && !gLevelOptions.sinkFences)
+			{
+				// Override: don't sink fences
+			}
+			else if ((gLevelNum != LEVEL_NUM_CLOUD)	&& (gLevelNum != LEVEL_NUM_SAUCER))		// dont sink in cloud or saucer - make flussh
 				y -= FENCE_SINK_FACTOR;									// sink into ground a little bit
 			y2 = y + height;
 

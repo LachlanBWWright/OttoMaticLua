@@ -1592,7 +1592,8 @@ float fps = gFramesPerSecondFrac;
 
 			/* VERIFY BOTTOMLESS PIT */
 
-	if (gLevelNum == LEVEL_NUM_CLOUD)
+	if ((gLevelOptionsOn && gLevelOptions.cloudRobotMode) ||
+		(gLevelNum == LEVEL_NUM_CLOUD))
 	{
 		if ((gCoord.y + theNode->BBox.min.y) < (GetTerrainY2(gCoord.x, gCoord.z) - 30.0f))		// if player is below terrain's real height
 		{

@@ -33,6 +33,61 @@
 
 
 
+			/*************************/
+			/* LEVEL OVERRIDE STRUCT */
+			/*************************/
+
+typedef struct
+{
+	// Sky system overrides
+	uint32_t	skyStyle;				// Index into sky table
+	Boolean		enableSkyGlow;			// Enable glow effect for sky
+	Boolean		skyFadeEdges;			// Enable sky edge fading
+	float		skyAltitude;			// Sky altitude positioning
+	
+	// Player system overrides
+	float		rocketScale;			// Rocket scale adjustment
+	Boolean		startWithFullFuel;		// Start level with full fuel
+	
+	// Camera system overrides
+	Boolean		useSaucerCamera;		// Use saucer-specific camera behavior
+	Boolean		useBlobBossCamera;		// Use blob boss camera behavior
+	
+	// Items and powerups
+	Boolean		conserveSparkles;		// Conserve sparkle effects
+	Boolean		jungleWeaponMode;		// Use jungle weapon behavior
+	Boolean		disableGroundEffects;	// Disable ground effects
+	
+	// Level mechanics
+	Boolean		blobBossTriggers;		// Use blob boss trigger behavior
+	Boolean		cloudRocketMode;		// Use cloud rocket sled behavior
+	Boolean		apocalypseZipMode;		// Use apocalypse zip line behavior
+	Boolean		saucerHumanMode;		// Use saucer human behavior
+	
+	// Terrain system overrides
+	Boolean		sinkFences;				// Sink fences into terrain
+	Boolean		blobSplineMode;			// Use blob world spline behavior
+	Boolean		cloudTerrainMode;		// Use cloud terrain behavior
+	
+	// Robot behavior overrides
+	Boolean		blobBossRobotMode;		// Use blob boss robot behavior
+	Boolean		cloudRobotMode;			// Use cloud robot behavior
+	
+	// Screen and UI overrides
+	Boolean		customIntroMode;		// Use custom intro behavior
+	Boolean		skipIntro;				// Skip level intro
+	Boolean		blobBonusMode;			// Use blob bonus screen behavior
+	Boolean		jungleBonusMode;		// Use jungle bonus screen behavior
+	Boolean		saucerInfobar;			// Use saucer infobar display
+	
+	// Enemy behavior overrides
+	Boolean		flyTrapAutoTarget;		// Enable flytrap auto-targeting
+	Boolean		enableSaucers;			// Enable saucer enemies
+	Boolean		cloudOnlyEnemies;		// Enable cloud-only enemies
+	int32_t		brainAlienMode;			// Brain alien behavior mode
+	
+} LevelOverrideType;
+
 
 			/*********************/
 			/* SPLINE STRUCTURES */

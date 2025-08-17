@@ -1498,6 +1498,63 @@ OSErr					iErr;
 		gSuperTileTextureObjects[unique]= MO_CreateNewObjectOfType(MO_TYPE_MATERIAL, 0, &matData);		// create the new object
 	}
 
+			/* TRY TO LOAD LEVEL OVERRIDE DATA */
+
+	Handle overrideHandle = GetResource('Ovrd', 1000);
+	if (overrideHandle != NULL)
+	{
+		// Found override data, load it
+		HLock(overrideHandle);
+		LevelOverrideType *overrideData = (LevelOverrideType *)*overrideHandle;
+		
+		// Copy data with endian swizzling
+		gLevelOptions.skyStyle = SwizzleULong(&overrideData->skyStyle);
+		gLevelOptions.enableSkyGlow = overrideData->enableSkyGlow;
+		gLevelOptions.skyFadeEdges = overrideData->skyFadeEdges;
+		gLevelOptions.skyAltitude = SwizzleFloat(&overrideData->skyAltitude);
+		
+		gLevelOptions.rocketScale = SwizzleFloat(&overrideData->rocketScale);
+		gLevelOptions.startWithFullFuel = overrideData->startWithFullFuel;
+		
+		gLevelOptions.useSaucerCamera = overrideData->useSaucerCamera;
+		gLevelOptions.useBlobBossCamera = overrideData->useBlobBossCamera;
+		
+		gLevelOptions.conserveSparkles = overrideData->conserveSparkles;
+		gLevelOptions.jungleWeaponMode = overrideData->jungleWeaponMode;
+		gLevelOptions.disableGroundEffects = overrideData->disableGroundEffects;
+		
+		gLevelOptions.blobBossTriggers = overrideData->blobBossTriggers;
+		gLevelOptions.cloudRocketMode = overrideData->cloudRocketMode;
+		gLevelOptions.apocalypseZipMode = overrideData->apocalypseZipMode;
+		gLevelOptions.saucerHumanMode = overrideData->saucerHumanMode;
+		
+		gLevelOptions.sinkFences = overrideData->sinkFences;
+		gLevelOptions.blobSplineMode = overrideData->blobSplineMode;
+		gLevelOptions.cloudTerrainMode = overrideData->cloudTerrainMode;
+		
+		gLevelOptions.blobBossRobotMode = overrideData->blobBossRobotMode;
+		gLevelOptions.cloudRobotMode = overrideData->cloudRobotMode;
+		
+		gLevelOptions.customIntroMode = overrideData->customIntroMode;
+		gLevelOptions.skipIntro = overrideData->skipIntro;
+		gLevelOptions.blobBonusMode = overrideData->blobBonusMode;
+		gLevelOptions.jungleBonusMode = overrideData->jungleBonusMode;
+		gLevelOptions.saucerInfobar = overrideData->saucerInfobar;
+		
+		gLevelOptions.flyTrapAutoTarget = overrideData->flyTrapAutoTarget;
+		gLevelOptions.enableSaucers = overrideData->enableSaucers;
+		gLevelOptions.cloudOnlyEnemies = overrideData->cloudOnlyEnemies;
+		gLevelOptions.brainAlienMode = SwizzleLong(&overrideData->brainAlienMode);
+		
+		ReleaseResource(overrideHandle);
+		gLevelOptionsOn = true;
+	}
+	else
+	{
+		// No override data found, disable override system
+		gLevelOptionsOn = false;
+	}
+
 			/* CLOSE THE FILE AND CLEAN UP */
 
 	FSClose(fRefNum);

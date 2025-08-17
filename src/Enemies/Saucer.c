@@ -82,6 +82,9 @@ Boolean CallAlienSaucer(ObjNode *who)
 {
 	float maxCallDistance = 4000.0f;
 
+	if (gLevelOptionsOn && !gLevelOptions.enableSaucers)
+		return(false);
+
 	switch(gLevelNum)									// no saucers on some levels
 	{
 		case	LEVEL_NUM_BLOBBOSS:

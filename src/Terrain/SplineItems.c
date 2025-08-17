@@ -577,7 +577,8 @@ void DrawSplines(void)
 		Boolean flat = false;
 		float flatY = 0;
 
-		if (gLevelNum == 2)
+		if ((gLevelOptionsOn && gLevelOptions.blobSplineMode) ||
+			(gLevelNum == 2))
 		{
 			flat = true;
 			flatY = 500;

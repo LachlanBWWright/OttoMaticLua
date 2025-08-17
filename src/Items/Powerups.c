@@ -663,7 +663,8 @@ float	y;
 			/* ATTACH SPARKLES */
 			/*******************/
 
-	if ((gLevelNum == LEVEL_NUM_BRAINBOSS) || (!gG4))					// conserve sparkles on BB level
+	if ((gLevelOptionsOn && gLevelOptions.conserveSparkles) ||
+		(gLevelNum == LEVEL_NUM_BRAINBOSS) || (!gG4))					// conserve sparkles on BB level
 		n = 4;
 	else
 		n = 8;

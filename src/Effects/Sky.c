@@ -217,7 +217,8 @@ float			u,v;
 	glEnable(GL_TEXTURE_2D);											// enable textures
 	glDisableClientState(GL_NORMAL_ARRAY);								// disable normal arrays
 
-	if (gLevelNum == LEVEL_NUM_APOCALYPSE)					// see if glow
+	if ((gLevelOptionsOn && gLevelOptions.enableSkyGlow) ||
+		(gLevelNum == LEVEL_NUM_APOCALYPSE))					// see if glow
 	{
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);								// make glow
 		gGlobalMaterialFlags |= BG3D_MATERIALFLAG_ALWAYSBLEND;
