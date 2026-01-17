@@ -9,6 +9,13 @@
 #include "PommeInit.h"
 #include "PommeFiles.h"
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "OttoMatic", __VA_ARGS__)
+#else
+#define LOGI(...) SDL_Log(__VA_ARGS__)
+#endif
+
 extern "C"
 {
 	#include "game.h"
@@ -23,6 +30,26 @@ static fs::path FindGameData(const char* executablePath)
 	fs::path dataPath;
 
 	int attemptNum = 0;
+
+#ifdef __ANDROID__
+	// On Android, use SDL's internal path for assets
+	const char* internalPath = SDL_GetBasePath();
+	if (internalPath)
+	{
+		dataPath = internalPath;
+		LOGI("Android internal path: %s", internalPath);
+	}
+	else
+	{
+		dataPath = "";  // Assets are embedded in the APK
+		LOGI("Using embedded assets");
+	}
+	
+	// Set data spec -- On Android, assets are in the root of the assets folder
+	gDataSpec = Pomme::Files::HostPathToFSSpec(dataPath / "System");
+	
+	return dataPath;
+#else
 
 #if !(__APPLE__)
 	attemptNum++;		// skip macOS special case #0
@@ -67,6 +94,7 @@ tryAgain:
 	}
 
 	return dataPath;
+#endif // !__ANDROID__
 }
 
 static void Boot(int argc, char** argv)
@@ -77,6 +105,8 @@ static void Boot(int argc, char** argv)
 #else
 	SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
 #endif
+
+	LOGI("Otto Matic starting up...");
 
 	// Start our "machine"
 	Pomme::Init();
@@ -95,6 +125,19 @@ retryVideo:
 		throw std::runtime_error("Couldn't initialize SDL video subsystem.");
 	}
 
+#ifdef __ANDROID__
+	// On Android, use OpenGL ES 1.1 for fixed-function pipeline support
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	
+	// Android windows are fullscreen by default
+	gSDLWindow = SDL_CreateWindow(
+		GAME_FULL_NAME " " GAME_VERSION, 0, 0,
+		SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
+	
+	LOGI("Created Android window with OpenGL ES 1.1");
+#else
 	// Create window
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
@@ -110,9 +153,11 @@ retryVideo:
 	gSDLWindow = SDL_CreateWindow(
 		GAME_FULL_NAME " " GAME_VERSION, 640, 480,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+#endif
 
 	if (!gSDLWindow)
 	{
+#ifndef __ANDROID__
 		if (gCurrentAntialiasingLevel != 0)
 		{
 			SDL_Log("Couldn't create SDL window with the requested MSAA level. Retrying without MSAA...");
@@ -123,6 +168,7 @@ retryVideo:
 			goto retryVideo;
 		}
 		else
+#endif
 		{
 			throw std::runtime_error("Couldn't create SDL window.");
 		}
@@ -130,17 +176,21 @@ retryVideo:
 
 	// Init gamepad subsystem
 	SDL_Init(SDL_INIT_GAMEPAD);
+#ifndef __ANDROID__
 	auto gamecontrollerdbPath8 = (dataPath / "System" / "gamecontrollerdb.txt").u8string();
 	if (-1 == SDL_AddGamepadMappingsFromFile((const char*)gamecontrollerdbPath8.c_str()))
 	{
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, GAME_FULL_NAME, "Couldn't load gamecontrollerdb.txt!", gSDLWindow);
 	}
+#endif
 }
 
 static void Shutdown()
 {
+#ifndef __ANDROID__
 	// Always restore the user's mouse acceleration before exiting.
 	SetMacLinearMouse(false);
+#endif
 
 	Pomme::Shutdown();
 
@@ -157,6 +207,8 @@ int main(int argc, char** argv)
 {
 	bool success = true;
 	std::string uncaught = "";
+
+	LOGI("main() called with argc=%d", argc);
 
 	try
 	{

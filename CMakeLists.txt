@@ -26,6 +26,8 @@ option(SANITIZE "Build with asan/ubsan" OFF)
 
 if(WIN32 OR APPLE)
 	# Don't warn
+elseif(ANDROID)
+	message("Building for Android")
 elseif(SANITIZE)
 	message("Sanitizers enabled")
 else()
@@ -36,7 +38,14 @@ endif()
 # GLOBAL OPTIONS (BEFORE ADDING SUBDIRECTORIES)
 #------------------------------------------------------------------------------
 
-if(MSVC)
+if(ANDROID)
+	# Android-specific build options
+	set(BUILD_SDL_FROM_SOURCE ON CACHE BOOL "Build SDL from source for Android" FORCE)
+	set(SDL_STATIC OFF CACHE BOOL "Use shared SDL on Android" FORCE)
+	add_compile_definitions(__ANDROID__)
+	# Android uses OpenGL ES
+	add_compile_definitions(GL_ES_VERSION_2_0)
+elseif(MSVC)
 	# This lets us detect that MSVC supports C++20 features via the __cplusplus macro
 	# (See: https://docs.microsoft.com/en-us/cpp/build/reference/zc-cplusplus)
 	add_compile_options(/Zc:__cplusplus)
@@ -95,7 +104,15 @@ endif()
 
 add_subdirectory(extern/Pomme)
 
-find_package(OpenGL REQUIRED)
+if(ANDROID)
+	# Android uses OpenGL ES 1.1 for fixed-function pipeline compatibility
+	find_library(GLES1_LIBRARY GLESv1_CM)  # OpenGL ES 1.1 with fixed function pipeline
+	find_library(EGL_LIBRARY EGL)
+	find_library(ANDROID_LOG_LIBRARY log)
+	find_library(ANDROID_LIBRARY android)
+else()
+	find_package(OpenGL REQUIRED)
+endif()
 
 #------------------------------------------------------------------------------
 # EXECUTABLE TARGET
@@ -119,7 +136,12 @@ elseif(APPLE)
 	set_source_files_properties(${CMAKE_SOURCE_DIR}/packaging/${GAME_TARGET}.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 endif()
 
-add_executable(${GAME_TARGET} ${GAME_SOURCES})
+# On Android, build a shared library for SDL to load
+if(ANDROID)
+	add_library(${GAME_TARGET} SHARED ${GAME_SOURCES})
+else()
+	add_executable(${GAME_TARGET} ${GAME_SOURCES})
+endif()
 
 target_include_directories(${GAME_TARGET} PRIVATE ${GAME_SRCDIR}/Headers)
 
@@ -197,7 +219,7 @@ if(SANITIZE)
 	target_link_libraries(${GAME_TARGET} PRIVATE asan ubsan)
 endif()
 
-# Explicitly link math lib on Linux
+# Explicitly link math lib on Linux/Android
 if(NOT APPLE AND NOT WIN32)
 	target_link_libraries(${GAME_TARGET} PRIVATE m)
 endif()
@@ -210,7 +232,18 @@ else()
 endif()
 
 # Link core dependencies
-target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+if(ANDROID)
+	# Android uses OpenGL ES 1.1 for fixed-function pipeline compatibility
+	target_link_libraries(${GAME_TARGET} PRIVATE 
+		Pomme 
+		${GLES1_LIBRARY} 
+		${EGL_LIBRARY}
+		${ANDROID_LOG_LIBRARY}
+		${ANDROID_LIBRARY}
+	)
+else()
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+endif()
 
 # Add required frameworks for KillMacMouseAcceleration
 if(APPLE)

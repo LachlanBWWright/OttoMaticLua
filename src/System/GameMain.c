@@ -354,6 +354,9 @@ static void DrawAreaExtraStuff(ObjNode* theNode)
 	DrawLensFlare();											// draw lens flare
 	DrawInfobar();												// draw infobar last
 	DrawDeathExit();											// draw death exit stuff
+
+	// Draw touch controls overlay (mobile devices)
+	TouchControls_Draw();
 }
 
 
