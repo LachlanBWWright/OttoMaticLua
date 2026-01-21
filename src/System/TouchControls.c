@@ -75,7 +75,7 @@ typedef struct
 TouchControlState gTouchControls;
 
 static TouchButton gTouchButtons[NUM_TOUCH_BUTTONS];
-static SDL_FingerID gDpadFinger = -1;   // Track which finger is on the d-pad
+static SDL_FingerID gDpadFinger = (SDL_FingerID)-1;   // Track which finger is on the d-pad
 static SDL_FingerID gButtonFingers[NUM_TOUCH_BUTTONS];
 
 static bool gTouchControlsInitialized = false;
@@ -135,10 +135,10 @@ void TouchControls_Init(void)
     gTouchControls.buttonScale = 1.0f;
     
     // Reset finger tracking
-    gDpadFinger = -1;
+    gDpadFinger = (SDL_FingerID)-1;
     for (int i = 0; i < NUM_TOUCH_BUTTONS; i++)
     {
-        gButtonFingers[i] = -1;
+        gButtonFingers[i] = (SDL_FingerID)-1;
     }
 
     // Initialize button positions
@@ -270,7 +270,7 @@ void TouchControls_Update(void)
     }
     
     // Clear d-pad state if no finger is tracking it
-    if (gDpadFinger == -1)
+    if (gDpadFinger == (SDL_FingerID)-1)
     {
         gTouchControls.analogX = 0;
         gTouchControls.analogY = 0;
@@ -305,7 +305,7 @@ void TouchControls_Update(void)
                     // Check if this finger is in the d-pad area
                     if (IsInDpadArea(touchX, touchY))
                     {
-                        if (gDpadFinger == -1 || gDpadFinger == finger->id)
+                        if (gDpadFinger == (SDL_FingerID)-1 || gDpadFinger == finger->id)
                         {
                             gDpadFinger = finger->id;
                             ProcessDpadTouch(touchX, touchY);
@@ -680,7 +680,7 @@ void TouchControls_HandleEvent(SDL_Event* event)
             
             if (IsInDpadArea(touchX, touchY))
             {
-                if (gDpadFinger == -1)
+                if (gDpadFinger == (SDL_FingerID)-1)
                 {
                     gDpadFinger = fingerID;
                     ProcessDpadTouch(touchX, touchY);
@@ -717,7 +717,7 @@ void TouchControls_HandleEvent(SDL_Event* event)
             
             if (fingerID == gDpadFinger)
             {
-                gDpadFinger = -1;
+                gDpadFinger = (SDL_FingerID)-1;
                 gTouchControls.analogX = 0;
                 gTouchControls.analogY = 0;
                 gTouchControls.dpadActive = false;
@@ -734,7 +734,7 @@ void TouchControls_HandleEvent(SDL_Event* event)
                     if (gButtonFingers[i] == fingerID)
                     {
                         gTouchControls.isPressed[i] = false;
-                        gButtonFingers[i] = -1;
+                        gButtonFingers[i] = (SDL_FingerID)-1;
                         break;
                     }
                 }

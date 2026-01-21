@@ -96,11 +96,29 @@ else()
 	endif()
 	message("Building SDL3 from source: " ${SDL3_DIR})
 	add_subdirectory("${SDL3_DIR}" EXCLUDE_FROM_ALL)
+	# Make SDL3 findable by subprojects without find_package
+	# SDL3::SDL3 alias is already created by SDL's CMakeLists.txt
+	set(SDL3_FOUND TRUE)
+	set(SDL3_INCLUDE_DIRS "${SDL3_DIR}/include")
+	set(SDL3_LIBRARIES SDL3::SDL3)
 endif()
 
 #------------------------------------------------------------------------------
 # DEPENDENCIES
 #------------------------------------------------------------------------------
+
+# For Pomme: Skip its find_package(SDL3) by providing the target info
+if(BUILD_SDL_FROM_SOURCE)
+	# Create a minimal FindSDL3.cmake that returns our already-built target
+	file(WRITE "${CMAKE_BINARY_DIR}/FindSDL3.cmake" 
+"# Auto-generated FindSDL3.cmake for source build
+set(SDL3_FOUND TRUE)
+if(NOT TARGET SDL3::SDL3)
+  message(FATAL_ERROR \"SDL3::SDL3 target not found - build SDL3 first\")
+endif()
+")
+	list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_BINARY_DIR}")
+endif()
 
 add_subdirectory(extern/Pomme)
 
