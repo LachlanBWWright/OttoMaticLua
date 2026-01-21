@@ -185,6 +185,9 @@ void UpdateInput(void)
 		}
 	}
 
+	// Update touch controls state
+	TouchControls_Update();
+
 	// --------------------------------------------
 	// Refresh the state of each individual mouse button,
 	// including wheelup/wheeldown which we are exposed to the game as buttons
