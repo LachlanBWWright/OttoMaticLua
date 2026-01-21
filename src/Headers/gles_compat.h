@@ -13,10 +13,10 @@
 // Function mappings (desktop to ES)
 // ============================================================================
 
-#define glOrtho(l,r,b,t,n,f) glOrthof((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f))
-#define glFrustum(l,r,b,t,n,f) glFrustumf((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f))
-#define glClearDepth(d) glClearDepthf((float)(d))
-#define glDepthRange(n,f) glDepthRangef((float)(n),(float)(f))
+#define glOrtho(left,right,bottom,top,zNear,zFar) glOrthof((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
+#define glFrustum(left,right,bottom,top,zNear,zFar) glFrustumf((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
+#define glClearDepth(depth) glClearDepthf((float)(depth))
+#define glDepthRange(zNear,zFar) glDepthRangef((float)(zNear),(float)(zFar))
 
 // ============================================================================
 // Stubbed functions (not available in ES)
