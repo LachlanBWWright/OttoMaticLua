@@ -82,8 +82,19 @@ Ensure you have internet access to Google's Maven repository (dl.google.com).
 Ensure the CMake build completes successfully and the shared library is generated.
 
 ### OpenGL ES errors
-The game uses OpenGL ES 1.1 for compatibility with the legacy fixed-function rendering.
-Ensure your device supports OpenGL ES 1.1 (most Android devices do).
+The game's original codebase uses OpenGL immediate mode (glBegin/glEnd) which is not 
+available in OpenGL ES. The touch controls overlay uses vertex arrays which are 
+OpenGL ES 1.1 compatible. For the full game rendering to work on Android, one of 
+these approaches may be needed:
+- Use a compatibility layer like gl4es (https://github.com/ptitSeb/gl4es)
+- Modify the game's rendering code to use vertex arrays instead of immediate mode
+
+## Known Limitations
+
+- The game rendering code uses OpenGL immediate mode which requires conversion 
+  for OpenGL ES compatibility
+- Touch controls are implemented but the full game may require a GL compatibility layer
+- The on-screen controls currently only support landscape orientation
 
 ## CI/CD
 
