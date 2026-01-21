@@ -46,14 +46,14 @@ android {
 
     externalNativeBuild {
         cmake {
-            path = file("../CMakeLists.txt")
+            path = file("../../CMakeLists.txt")
             version = "3.22.1"
         }
     }
 
     sourceSets {
         getByName("main") {
-            assets.srcDirs("../Data")
+            assets.srcDirs("../../Data")
         }
     }
 

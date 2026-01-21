@@ -18,3 +18,11 @@ extern/SDL*
 # macOS metadata
 .DS_Store
 
+# Android
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+android/app/.cxx/
+*.apk
+*.aab
