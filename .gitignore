@@ -26,3 +26,6 @@ android/build/
 android/app/.cxx/
 *.apk
 *.aab
+
+# CodeQL artifacts
+_codeql_detected_source_root
