@@ -28,23 +28,27 @@ jobs:
           git clone --depth 1 https://github.com/libsdl-org/SDL.git extern/SDL
         fi
     
-    - name: Copy SDL Java files
+    - name: Copy SDL Java files (if not present)
       run: |
-        mkdir -p android/app/src/main/java/org/libsdl/app
-        cp extern/SDL/android-project/app/src/main/java/org/libsdl/app/*.java android/app/src/main/java/org/libsdl/app/
+        if [ ! -f "android/app/src/main/java/org/libsdl/app/SDLActivity.java" ]; then
+          mkdir -p android/app/src/main/java/org/libsdl/app
+          cp extern/SDL/android-project/app/src/main/java/org/libsdl/app/*.java android/app/src/main/java/org/libsdl/app/
+        fi
     
-    - name: Copy launcher icons
+    - name: Copy launcher icons (if not present)
       run: |
-        mkdir -p android/app/src/main/res/mipmap-mdpi
-        mkdir -p android/app/src/main/res/mipmap-hdpi
-        mkdir -p android/app/src/main/res/mipmap-xhdpi
-        mkdir -p android/app/src/main/res/mipmap-xxhdpi
-        mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-        cp extern/SDL/android-project/app/src/main/res/mipmap-mdpi/ic_launcher.png android/app/src/main/res/mipmap-mdpi/
-        cp extern/SDL/android-project/app/src/main/res/mipmap-hdpi/ic_launcher.png android/app/src/main/res/mipmap-hdpi/
-        cp extern/SDL/android-project/app/src/main/res/mipmap-xhdpi/ic_launcher.png android/app/src/main/res/mipmap-xhdpi/
-        cp extern/SDL/android-project/app/src/main/res/mipmap-xxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxhdpi/
-        cp extern/SDL/android-project/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/
+        if [ ! -f "android/app/src/main/res/mipmap-mdpi/ic_launcher.png" ]; then
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+          cp extern/SDL/android-project/app/src/main/res/mipmap-mdpi/ic_launcher.png android/app/src/main/res/mipmap-mdpi/
+          cp extern/SDL/android-project/app/src/main/res/mipmap-hdpi/ic_launcher.png android/app/src/main/res/mipmap-hdpi/
+          cp extern/SDL/android-project/app/src/main/res/mipmap-xhdpi/ic_launcher.png android/app/src/main/res/mipmap-xhdpi/
+          cp extern/SDL/android-project/app/src/main/res/mipmap-xxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxhdpi/
+          cp extern/SDL/android-project/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/
+        fi
     
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
@@ -52,7 +56,7 @@ jobs:
     - name: Create local.properties
       run: |
         echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-        echo "ndk.dir=$ANDROID_NDK" >> android/local.properties
+        echo "ndk.dir=$ANDROID_NDK_HOME" >> android/local.properties
     
     - name: Build with Gradle
       working-directory: android
