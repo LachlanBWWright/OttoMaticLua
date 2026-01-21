@@ -25,11 +25,8 @@ extern "C"
 #include <SDL3/SDL.h>
 
 #ifdef __ANDROID__
-// Android uses OpenGL ES 1.1 for fixed-function pipeline compatibility
-#include <GLES/gl.h>
-#include <GLES/glext.h>
-// Compatibility functions - OpenGL ES 1.1 supports most of what we need
-#define glOrtho(l,r,b,t,n,f) glOrthof((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f))
+// Android uses OpenGL ES 1.1 - include compatibility header
+#include "gles_compat.h"
 #else
 #include <SDL3/SDL_opengl.h>
 #include <SDL3/SDL_opengl_glext.h>

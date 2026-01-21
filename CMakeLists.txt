@@ -43,8 +43,7 @@ if(ANDROID)
 	set(BUILD_SDL_FROM_SOURCE ON CACHE BOOL "Build SDL from source for Android" FORCE)
 	set(SDL_STATIC OFF CACHE BOOL "Use shared SDL on Android" FORCE)
 	add_compile_definitions(__ANDROID__)
-	# Android uses OpenGL ES
-	add_compile_definitions(GL_ES_VERSION_2_0)
+	# Note: GL_ES defines are added only to game target, not globally
 elseif(MSVC)
 	# This lets us detect that MSVC supports C++20 features via the __cplusplus macro
 	# (See: https://docs.microsoft.com/en-us/cpp/build/reference/zc-cplusplus)

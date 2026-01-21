@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "io.jor.ottomatic"
     compileSdk = 34
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         applicationId = "io.jor.ottomatic"
