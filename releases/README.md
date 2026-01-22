@@ -24,6 +24,16 @@ copy /b OttoMatic-debug.apk.partaa+OttoMatic-debug.apk.partab+OttoMatic-debug.ap
 
 ## Installing on Android
 
+### Using ADB (recommended)
+```bash
+# Reassemble the APK first
+cat OttoMatic-debug.apk.part* > OttoMatic-debug.apk
+
+# Install via ADB
+adb install OttoMatic-debug.apk
+```
+
+### Manual installation
 1. Reassemble the APK using the commands above
 2. Transfer `OttoMatic-debug.apk` to your Android device
 3. Enable "Install from unknown sources" in your device settings
