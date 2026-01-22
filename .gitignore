@@ -27,5 +27,9 @@ android/app/.cxx/
 *.apk
 *.aab
 
+# Except for split APK parts in releases/
+!releases/
+!releases/*
+
 # CodeQL artifacts
 _codeql_detected_source_root
