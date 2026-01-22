@@ -72,5 +72,5 @@ The APK will be at: `android/app/build/outputs/apk/debug/app-debug.apk`
 After reassembling, verify the APK integrity:
 ```bash
 sha256sum OttoMatic-debug.apk
-# Expected: c964fba4168aa3cb32955680db786ffa9130e60fa97bda35bdabe6ea42c40072
+# Expected: 164ca4e232be7320b2d23809f42ce731048e48d7cf5e0525721e1bd828d5795f
 ```
