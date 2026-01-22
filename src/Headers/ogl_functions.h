@@ -2,8 +2,10 @@
 
 #ifdef __ANDROID__
 #include "gles_compat.h"
-// On Android with ES 3.0, use glActiveTexture directly
-// glClientActiveTexture doesn't exist in ES 2.0+ (no fixed-function texture units)
+// On Android, use glActiveTexture and glClientActiveTexture directly (they're in ES 1.1)
+#define glActiveTextureARB glActiveTexture
+#define glClientActiveTextureARB glClientActiveTexture
+// No-op init on Android
 #define OGL_InitFunctions() ((void)0)
 #else
 #include <SDL3/SDL_opengl.h>

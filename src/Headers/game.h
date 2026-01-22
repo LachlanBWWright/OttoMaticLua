@@ -25,7 +25,7 @@ extern "C"
 #include <SDL3/SDL.h>
 
 #ifdef __ANDROID__
-// Android uses OpenGL ES 3.0 - include compatibility header for fixed-function emulation
+// Android uses OpenGL ES 1.1 - include compatibility header
 #include "gles_compat.h"
 #else
 #include <SDL3/SDL_opengl.h>
