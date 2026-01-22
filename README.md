@@ -8,6 +8,8 @@ This is Pangea Software’s **Otto Matic** updated to run on modern desktop plat
 
 ![Otto Matic screenshot](docs/screenshot.webp)
 
+**Android APK:** See [releases/](releases/) folder for pre-built APK, or [android/README.md](android/README.md) for build instructions.
+
 ## The story 
  
 The year is 1957 and a fleet of flying saucers from Planet X have come to Earth. These saucers are under the control of the evil Brain Aliens who are abducting helpless human beings to become slaves of The Giant Brain.
