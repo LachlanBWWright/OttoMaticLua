@@ -8,6 +8,7 @@
 
 #include <GLES/gl.h>
 #include <GLES/glext.h>
+#include <stdlib.h>
 
 // ============================================================================
 // Function mappings (desktop to ES)
@@ -17,6 +18,37 @@
 #define glFrustum(left,right,bottom,top,zNear,zFar) glFrustumf((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
 #define glClearDepth(depth) glClearDepthf((float)(depth))
 #define glDepthRange(zNear,zFar) glDepthRangef((float)(zNear),(float)(zFar))
+
+// ============================================================================
+// glDrawElements wrapper for GL_UNSIGNED_INT -> GL_UNSIGNED_SHORT conversion
+// OpenGL ES 1.1 doesn't support GL_UNSIGNED_INT indices
+// ============================================================================
+
+static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
+{
+    if (type == GL_UNSIGNED_INT)
+    {
+        // Convert 32-bit indices to 16-bit
+        const GLuint *src = (const GLuint *)indices;
+        GLushort *tmp = (GLushort *)malloc(count * sizeof(GLushort));
+        if (tmp)
+        {
+            for (GLsizei i = 0; i < count; i++)
+            {
+                tmp[i] = (GLushort)(src[i] & 0xFFFF);
+            }
+            glDrawElements(mode, count, GL_UNSIGNED_SHORT, tmp);
+            free(tmp);
+        }
+    }
+    else
+    {
+        glDrawElements(mode, count, type, indices);
+    }
+}
+
+// Replace glDrawElements calls that use GL_UNSIGNED_INT
+#define glDrawElements(mode, count, type, indices) _gles_DrawElements(mode, count, type, indices)
 
 // ============================================================================
 // Stubbed functions (not available in ES)
@@ -96,6 +128,12 @@
 #endif
 #ifndef GL_DOUBLE
 #define GL_DOUBLE GL_FLOAT
+#endif
+
+// GL_UNSIGNED_INT is not supported by ES 1.1 glDrawElements but we define it
+// for compilation compatibility - the _gles_DrawElements wrapper handles conversion
+#ifndef GL_UNSIGNED_INT
+#define GL_UNSIGNED_INT 0x1405
 #endif
 
 // Texture coordinate generation constants
