@@ -917,18 +917,40 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 		return rgba;
 	}
 	
-	// Ensure destFormat is valid for ES - use GL_RGBA for RGBA src
-	if (*srcFormat == GL_RGBA && *destFormat != GL_RGBA)
+	// OpenGL ES 1.1 requires internal format (destFormat) to match external format
+	// Force destFormat to a valid ES internal format
+	if (*srcFormat == GL_RGBA)
 	{
-		TEXTURE_LOGD("Forcing destFormat to GL_RGBA (was 0x%x)", *destFormat);
-		*destFormat = GL_RGBA;
+		if (*destFormat != GL_RGBA)
+		{
+			TEXTURE_LOGD("Forcing destFormat to GL_RGBA (was 0x%x)", *destFormat);
+			*destFormat = GL_RGBA;
+		}
 	}
-	
-	// Ensure destFormat is valid for ES - use GL_RGB for RGB src
-	if (*srcFormat == GL_RGB && *destFormat != GL_RGB)
+	else if (*srcFormat == GL_RGB)
 	{
-		TEXTURE_LOGD("Forcing destFormat to GL_RGB (was 0x%x)", *destFormat);
-		*destFormat = GL_RGB;
+		if (*destFormat != GL_RGB)
+		{
+			TEXTURE_LOGD("Forcing destFormat to GL_RGB (was 0x%x)", *destFormat);
+			*destFormat = GL_RGB;
+		}
+	}
+	else if (*srcFormat == GL_LUMINANCE_ALPHA)
+	{
+		*destFormat = GL_LUMINANCE_ALPHA;
+	}
+	else if (*srcFormat == GL_LUMINANCE)
+	{
+		*destFormat = GL_LUMINANCE;
+	}
+	else if (*srcFormat == GL_ALPHA)
+	{
+		*destFormat = GL_ALPHA;
+	}
+	else
+	{
+		// Unknown source format - log warning
+		TEXTURE_LOGD("Unknown srcFormat 0x%x - may cause GL errors", *srcFormat);
 	}
 	
 	TEXTURE_LOGD("No conversion needed, final: srcFormat=0x%x destFormat=0x%x dataType=0x%x",
