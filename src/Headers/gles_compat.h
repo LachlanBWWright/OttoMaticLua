@@ -146,6 +146,14 @@ static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, c
 #define GL_UNSIGNED_INT 0x1405
 #endif
 
+// Blend function query constants (for state stack)
+#ifndef GL_BLEND_SRC
+#define GL_BLEND_SRC 0x0BE1
+#endif
+#ifndef GL_BLEND_DST
+#define GL_BLEND_DST 0x0BE0
+#endif
+
 // Texture coordinate generation constants
 #ifndef GL_S
 #define GL_S 0x2000
