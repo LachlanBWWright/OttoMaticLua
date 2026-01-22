@@ -2,6 +2,16 @@
 
 This document describes how to build Otto Matic for Android.
 
+## Pre-built APK
+
+A pre-built APK is available in the `releases/` folder. Due to GitHub's file size limit, it's split into parts:
+
+```bash
+cd releases
+cat OttoMatic-debug.apk.part* > OttoMatic-debug.apk
+# Install: adb install OttoMatic-debug.apk
+```
+
 ## Prerequisites
 
 - Android Studio (recommended) or command-line tools
@@ -65,15 +75,23 @@ The Android port features on-screen touch controls:
 The game includes an OpenGL ES 1.1 compatibility layer (`gles_compat.h`) that:
 
 - Maps desktop OpenGL functions to ES equivalents (glOrtho → glOrthof, etc.)
+- Converts texture formats (GL_BGRA_EXT, 16-bit packed) to supported formats
+- Converts 32-bit indices to 16-bit for glDrawElements (ES 1.1 limitation)
 - Stubs out unavailable functions (immediate mode rendering, texture generation)
 - Defines missing constants for compatibility
 
 **Current Status:**
+- ✅ Textures load correctly (format conversion working)
+- ✅ 3D geometry renders (index conversion working)
 - ✅ Touch controls render correctly (uses vertex arrays)
 - ✅ Game logic works
 - ⚠️ Some visual effects using immediate mode (glBegin/glEnd) are stubbed
 
 For full game rendering, consider using [gl4es](https://github.com/ptitSeb/gl4es).
+
+## First Run
+
+On first launch, the app extracts ~200MB of game assets from the APK to internal storage. This is required because the Pomme library uses file I/O that cannot read directly from APK assets. Subsequent launches will be fast.
 
 ## Troubleshooting
 
@@ -86,11 +104,16 @@ Update the `ndkVersion` in `app/build.gradle.kts` to match your installed NDK ve
 ### Native library not found
 Ensure the CMake build completes successfully and the shared library is generated.
 
+### App crashes on startup
+- Check logcat for "SDL_main" errors - the entry point should be found
+- Check for "preferences folder" warnings - HOME environment should be set
+- Check for GL errors (0x502 = GL_INVALID_OPERATION) - texture formats should be converted
+
 ## Known Limitations
 
 - Immediate mode OpenGL (glBegin/glEnd) is stubbed - some visual effects won't render
-- Touch controls are implemented and functional
-- The on-screen controls currently only support landscape orientation
+- First run extracts ~200MB of assets (subsequent runs are fast)
+- Touch controls currently only support landscape orientation
 
 ## CI/CD
 
