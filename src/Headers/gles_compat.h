@@ -169,6 +169,21 @@ static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, c
 #ifndef GL_TEXTURE1_ARB
 #define GL_TEXTURE1_ARB GL_TEXTURE1
 #endif
+#ifndef GL_COMBINE
+#define GL_COMBINE 0x8570
+#endif
+#ifndef GL_COMBINE_EXT
+#define GL_COMBINE_EXT 0x8570
+#endif
+#ifndef GL_COMBINE_RGB
+#define GL_COMBINE_RGB 0x8571
+#endif
+#ifndef GL_COMBINE_RGB_EXT
+#define GL_COMBINE_RGB_EXT 0x8571
+#endif
+#ifndef GL_ADD
+#define GL_ADD 0x0104
+#endif
 
 // ============================================================================
 // Extension function pointer types (for compatibility with extension loading code)
