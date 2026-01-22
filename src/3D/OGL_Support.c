@@ -27,6 +27,12 @@ static void ColorBalanceRGBForAnaglyph(uint32_t *rr, uint32_t *gg, uint32_t *bb)
 static void	ConvertTextureToGrey(void *imageMemory, short width, short height, GLint srcFormat, GLint dataType);
 static void	ConvertTextureToColorAnaglyph(void *imageMemory, short width, short height, GLint srcFormat, GLint dataType);
 
+#ifdef __ANDROID__
+// Convert texture data from unsupported formats to OpenGL ES compatible RGBA/UNSIGNED_BYTE
+static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
+                                   GLint *srcFormat, GLint *destFormat, GLint *dataType);
+#endif
+
 
 /****************************/
 /*    CONSTANTS             */
@@ -779,6 +785,101 @@ int	t,b,l,r;
 
 #pragma mark -
 
+#ifdef __ANDROID__
+/***************** CONVERT TEXTURE FOR GLES **************************/
+//
+// OpenGL ES 1.1 doesn't support GL_BGRA_EXT, GL_UNSIGNED_SHORT_1_5_5_5_REV,
+// or GL_UNSIGNED_INT_8_8_8_8_REV formats. This function converts texture
+// data to RGBA/UNSIGNED_BYTE format that OpenGL ES supports.
+//
+// Returns pointer to converted data (must be freed by caller), or NULL if
+// no conversion was needed.
+//
+
+static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
+                                   GLint *srcFormat, GLint *destFormat, GLint *dataType)
+{
+	int numPixels = width * height;
+	uint8_t *rgba = NULL;
+	
+	// Convert GL_BGRA_EXT + GL_UNSIGNED_SHORT_1_5_5_5_REV (16-bit ARGB1555)
+	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_SHORT_1_5_5_5_REV)
+	{
+		uint16_t *src = (uint16_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) return NULL;
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			uint16_t pixel = src[i];
+			// GL_UNSIGNED_SHORT_1_5_5_5_REV format: ARRRRRGGGGGBBBBB (1-5-5-5 bit layout)
+			// Extract components
+			uint8_t a = (pixel >> 15) & 0x01;  // 1 bit alpha
+			uint8_t r = (pixel >> 10) & 0x1F;  // 5 bits red
+			uint8_t g = (pixel >> 5) & 0x1F;   // 5 bits green
+			uint8_t b = pixel & 0x1F;          // 5 bits blue
+			
+			// Expand to 8-bit (replicate high bits into low bits for proper scaling)
+			rgba[i*4 + 0] = (r << 3) | (r >> 2);
+			rgba[i*4 + 1] = (g << 3) | (g >> 2);
+			rgba[i*4 + 2] = (b << 3) | (b >> 2);
+			rgba[i*4 + 3] = a ? 255 : 0;
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// Convert GL_BGRA_EXT + GL_UNSIGNED_INT_8_8_8_8_REV (32-bit ARGB8888)
+	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_INT_8_8_8_8_REV)
+	{
+		uint32_t *src = (uint32_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) return NULL;
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			uint32_t pixel = src[i];
+			// GL_UNSIGNED_INT_8_8_8_8_REV with GL_BGRA_EXT: AARRGGBB byte order
+			rgba[i*4 + 0] = (pixel >> 16) & 0xFF;  // R
+			rgba[i*4 + 1] = (pixel >> 8) & 0xFF;   // G
+			rgba[i*4 + 2] = pixel & 0xFF;          // B
+			rgba[i*4 + 3] = (pixel >> 24) & 0xFF;  // A
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// Convert GL_BGRA_EXT + GL_UNSIGNED_BYTE (simple BGRA to RGBA swap)
+	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_BYTE)
+	{
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) return NULL;
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i*4 + 2];  // R <- B
+			rgba[i*4 + 1] = src[i*4 + 1];  // G <- G
+			rgba[i*4 + 2] = src[i*4 + 0];  // B <- R
+			rgba[i*4 + 3] = src[i*4 + 3];  // A <- A
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// No conversion needed
+	return NULL;
+}
+#endif // __ANDROID__
 
 /***************** OGL TEXTUREMAP LOAD **************************/
 
@@ -786,7 +887,16 @@ GLuint OGL_TextureMap_Load(void *imageMemory, int width, int height,
 							GLint srcFormat,  GLint destFormat, GLint dataType)
 {
 GLuint	textureName;
+void	*convertedData = NULL;
 
+#ifdef __ANDROID__
+	// Convert texture format if needed for OpenGL ES compatibility
+	convertedData = ConvertTextureForGLES(imageMemory, width, height, &srcFormat, &destFormat, &dataType);
+	if (convertedData)
+	{
+		imageMemory = convertedData;
+	}
+#endif
 
 	if (gGamePrefs.anaglyphMode == ANAGLYPH_COLOR)
 		ConvertTextureToColorAnaglyph(imageMemory, width, height, srcFormat, dataType);
@@ -825,6 +935,16 @@ GLuint	textureName;
 				/* SET THIS TEXTURE AS CURRENTLY ACTIVE FOR DRAWING */
 
 	OGL_Texture_SetOpenGLTexture(textureName);
+
+#ifdef __ANDROID__
+	// Free converted data if we allocated any
+	if (convertedData)
+	{
+		SafeDisposePtr((Ptr)convertedData);
+	}
+#else
+	(void)convertedData; // Suppress unused variable warning on non-Android
+#endif
 
 	return(textureName);
 }

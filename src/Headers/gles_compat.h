@@ -85,6 +85,9 @@
 #ifndef GL_UNSIGNED_SHORT_1_5_5_5_REV
 #define GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
 #endif
+#ifndef GL_BGRA_EXT
+#define GL_BGRA_EXT 0x80E1
+#endif
 #ifndef GL_CLAMP
 #define GL_CLAMP GL_CLAMP_TO_EDGE
 #endif

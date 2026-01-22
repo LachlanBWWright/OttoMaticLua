@@ -292,6 +292,27 @@ static void Boot(int argc, char** argv)
 
 	LOGI("Otto Matic starting up...");
 
+#ifdef __ANDROID__
+	// On Android, we need to set the HOME environment variable BEFORE initializing Pomme
+	// The Pomme library's FindFolder() uses HOME for the preferences folder
+	const char* androidInternalPath = SDL_GetAndroidInternalStoragePath();
+	if (androidInternalPath)
+	{
+		// Set HOME to internal storage so Pomme can find/create preferences folder
+		setenv("HOME", androidInternalPath, 1);
+		LOGI("Set HOME environment variable to: %s", androidInternalPath);
+		
+		// Also create the .config directory that Pomme expects on Linux/Android
+		std::string configDir = std::string(androidInternalPath) + "/.config";
+		CreateDirectoryRecursive(configDir);
+		LOGI("Created config directory: %s", configDir.c_str());
+	}
+	else
+	{
+		LOGE("WARNING: Could not get Android internal storage path for HOME");
+	}
+#endif
+
 	// Start our "machine"
 	Pomme::Init();
 
