@@ -18,6 +18,6 @@ public class OttoMaticActivity extends SDLActivity {
     
     @Override
     protected String getMainFunction() {
-        return "main";
+        return "SDL_main";
     }
 }
