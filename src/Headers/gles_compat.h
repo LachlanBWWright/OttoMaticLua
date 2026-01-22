@@ -24,6 +24,9 @@
 // OpenGL ES 1.1 doesn't support GL_UNSIGNED_INT indices
 // ============================================================================
 
+#include <android/log.h>
+#define GLES_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "GLES_Compat", __VA_ARGS__)
+
 static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
 {
     if (type == GL_UNSIGNED_INT)
@@ -35,10 +38,17 @@ static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, c
         {
             for (GLsizei i = 0; i < count; i++)
             {
+                // Truncate to 16-bit - models should have <65536 vertices
                 tmp[i] = (GLushort)(src[i] & 0xFFFF);
             }
             glDrawElements(mode, count, GL_UNSIGNED_SHORT, tmp);
             free(tmp);
+        }
+        else
+        {
+            // Memory allocation failed - log error but don't crash
+            GLES_LOGE("_gles_DrawElements: Failed to allocate %d bytes for index conversion", 
+                      (int)(count * sizeof(GLushort)));
         }
     }
     else
