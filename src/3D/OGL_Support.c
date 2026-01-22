@@ -786,11 +786,15 @@ int	t,b,l,r;
 #pragma mark -
 
 #ifdef __ANDROID__
+#include <android/log.h>
+#define TEXTURE_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "OGL_Texture", __VA_ARGS__)
+#define TEXTURE_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "OGL_Texture", __VA_ARGS__)
+
 /***************** CONVERT TEXTURE FOR GLES **************************/
 //
-// OpenGL ES 1.1 doesn't support GL_BGRA_EXT, GL_UNSIGNED_SHORT_1_5_5_5_REV,
-// or GL_UNSIGNED_INT_8_8_8_8_REV formats. This function converts texture
-// data to RGBA/UNSIGNED_BYTE format that OpenGL ES supports.
+// OpenGL ES doesn't support many desktop GL texture formats.
+// This function converts texture data to RGBA/UNSIGNED_BYTE format
+// that OpenGL ES supports universally.
 //
 // Returns pointer to converted data (must be freed by caller), or NULL if
 // no conversion was needed.
@@ -802,24 +806,29 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 	int numPixels = width * height;
 	uint8_t *rgba = NULL;
 	
+	TEXTURE_LOGD("ConvertTextureForGLES: srcFormat=0x%x destFormat=0x%x dataType=0x%x size=%dx%d",
+	             *srcFormat, *destFormat, *dataType, width, height);
+	
 	// Convert GL_BGRA_EXT + GL_UNSIGNED_SHORT_1_5_5_5_REV (16-bit ARGB1555)
 	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_SHORT_1_5_5_5_REV)
 	{
+		TEXTURE_LOGD("Converting 16-bit ARGB1555 to RGBA8");
 		uint16_t *src = (uint16_t *)imageMemory;
 		rgba = (uint8_t *)AllocPtr(numPixels * 4);
-		if (!rgba) return NULL;
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
 		
 		for (int i = 0; i < numPixels; i++)
 		{
 			uint16_t pixel = src[i];
 			// GL_UNSIGNED_SHORT_1_5_5_5_REV format: ARRRRRGGGGGBBBBB (1-5-5-5 bit layout)
-			// Extract components
-			uint8_t a = (pixel >> 15) & 0x01;  // 1 bit alpha
-			uint8_t r = (pixel >> 10) & 0x1F;  // 5 bits red
-			uint8_t g = (pixel >> 5) & 0x1F;   // 5 bits green
-			uint8_t b = pixel & 0x1F;          // 5 bits blue
+			uint8_t a = (pixel >> 15) & 0x01;
+			uint8_t r = (pixel >> 10) & 0x1F;
+			uint8_t g = (pixel >> 5) & 0x1F;
+			uint8_t b = pixel & 0x1F;
 			
-			// Expand to 8-bit (replicate high bits into low bits for proper scaling)
 			rgba[i*4 + 0] = (r << 3) | (r >> 2);
 			rgba[i*4 + 1] = (g << 3) | (g >> 2);
 			rgba[i*4 + 2] = (b << 3) | (b >> 2);
@@ -835,14 +844,17 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 	// Convert GL_BGRA_EXT + GL_UNSIGNED_INT_8_8_8_8_REV (32-bit ARGB8888)
 	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_INT_8_8_8_8_REV)
 	{
+		TEXTURE_LOGD("Converting 32-bit ARGB8888 to RGBA8");
 		uint32_t *src = (uint32_t *)imageMemory;
 		rgba = (uint8_t *)AllocPtr(numPixels * 4);
-		if (!rgba) return NULL;
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
 		
 		for (int i = 0; i < numPixels; i++)
 		{
 			uint32_t pixel = src[i];
-			// GL_UNSIGNED_INT_8_8_8_8_REV with GL_BGRA_EXT: AARRGGBB byte order
 			rgba[i*4 + 0] = (pixel >> 16) & 0xFF;  // R
 			rgba[i*4 + 1] = (pixel >> 8) & 0xFF;   // G
 			rgba[i*4 + 2] = pixel & 0xFF;          // B
@@ -858,9 +870,13 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 	// Convert GL_BGRA_EXT + GL_UNSIGNED_BYTE (simple BGRA to RGBA swap)
 	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_BYTE)
 	{
+		TEXTURE_LOGD("Converting BGRA to RGBA");
 		uint8_t *src = (uint8_t *)imageMemory;
 		rgba = (uint8_t *)AllocPtr(numPixels * 4);
-		if (!rgba) return NULL;
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
 		
 		for (int i = 0; i < numPixels; i++)
 		{
@@ -876,7 +892,48 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 		return rgba;
 	}
 	
-	// No conversion needed
+	// Handle any other GL_BGRA_EXT format
+	if (*srcFormat == GL_BGRA_EXT)
+	{
+		TEXTURE_LOGD("Converting unknown BGRA format (dataType=0x%x) to RGBA", *dataType);
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i*4 + 2];  // R <- B
+			rgba[i*4 + 1] = src[i*4 + 1];  // G <- G
+			rgba[i*4 + 2] = src[i*4 + 0];  // B <- R
+			rgba[i*4 + 3] = src[i*4 + 3];  // A <- A
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// Ensure destFormat is valid for ES - use GL_RGBA for RGBA src
+	if (*srcFormat == GL_RGBA && *destFormat != GL_RGBA)
+	{
+		TEXTURE_LOGD("Forcing destFormat to GL_RGBA (was 0x%x)", *destFormat);
+		*destFormat = GL_RGBA;
+	}
+	
+	// Ensure destFormat is valid for ES - use GL_RGB for RGB src
+	if (*srcFormat == GL_RGB && *destFormat != GL_RGB)
+	{
+		TEXTURE_LOGD("Forcing destFormat to GL_RGB (was 0x%x)", *destFormat);
+		*destFormat = GL_RGB;
+	}
+	
+	TEXTURE_LOGD("No conversion needed, final: srcFormat=0x%x destFormat=0x%x dataType=0x%x",
+	             *srcFormat, *destFormat, *dataType);
+	
 	return NULL;
 }
 #endif // __ANDROID__
