@@ -18,3 +18,18 @@ extern/SDL*
 # macOS metadata
 .DS_Store
 
+# Android
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+android/app/.cxx/
+*.apk
+*.aab
+
+# Except for split APK parts in releases/
+!releases/
+!releases/*
+
+# CodeQL artifacts
+_codeql_detected_source_root

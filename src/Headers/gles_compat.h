@@ -1,0 +1,215 @@
+// OPENGL ES 1.1 COMPATIBILITY HEADER FOR ANDROID
+// Provides compatibility shims for desktop OpenGL functions
+// that don't exist in OpenGL ES 1.1
+
+#pragma once
+
+#ifdef __ANDROID__
+
+#include <GLES/gl.h>
+#include <GLES/glext.h>
+#include <stdlib.h>
+#include <android/log.h>
+
+#define GLES_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "GLES_Compat", __VA_ARGS__)
+#define GLES_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "GLES_Compat", __VA_ARGS__)
+
+// ============================================================================
+// Function mappings (desktop to ES)
+// OpenGL ES 1.1 uses float versions of these functions
+// ============================================================================
+
+#define glOrtho(left,right,bottom,top,zNear,zFar) glOrthof((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
+#define glFrustum(left,right,bottom,top,zNear,zFar) glFrustumf((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
+#define glClearDepth(depth) glClearDepthf((float)(depth))
+#define glDepthRange(zNear,zFar) glDepthRangef((float)(zNear),(float)(zFar))
+
+// ============================================================================
+// glDrawElements wrapper for GL_UNSIGNED_INT -> GL_UNSIGNED_SHORT conversion
+// OpenGL ES 1.1 doesn't support GL_UNSIGNED_INT indices
+// ============================================================================
+
+static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
+{
+    if (type == GL_UNSIGNED_INT)
+    {
+        // Convert 32-bit indices to 16-bit
+        const GLuint *src = (const GLuint *)indices;
+        GLushort *tmp = (GLushort *)malloc(count * sizeof(GLushort));
+        if (tmp)
+        {
+            for (GLsizei i = 0; i < count; i++)
+            {
+                // Truncate to 16-bit - models should have <65536 vertices
+                tmp[i] = (GLushort)(src[i] & 0xFFFF);
+            }
+            glDrawElements(mode, count, GL_UNSIGNED_SHORT, tmp);
+            free(tmp);
+        }
+        else
+        {
+            GLES_LOGE("_gles_DrawElements: Failed to allocate %d bytes for index conversion",
+                      (int)(count * sizeof(GLushort)));
+        }
+    }
+    else
+    {
+        glDrawElements(mode, count, type, indices);
+    }
+}
+
+// Replace glDrawElements calls that use GL_UNSIGNED_INT
+#define glDrawElements(mode, count, type, indices) _gles_DrawElements(mode, count, type, indices)
+
+// ============================================================================
+// Stubbed functions (not available in ES 1.1)
+// ============================================================================
+
+#define glColorMaterial(face, mode) ((void)0)
+#define glFogi(pname, param) ((void)0)
+#define glFogiv(pname, params) ((void)0)
+#define glPolygonMode(face, mode) ((void)0)
+#define glTexGeni(coord, pname, param) ((void)0)
+#define glTexGenf(coord, pname, param) ((void)0)
+#define glTexGenfv(coord, pname, params) ((void)0)
+#define glLightModeli(pname, param) glLightModelf(pname, (GLfloat)(param))
+
+// ============================================================================
+// Immediate mode stubs (not in ES - stubbed to no-op)
+// These effects won't render but game logic still works
+// ============================================================================
+
+#define glBegin(mode) ((void)0)
+#define glEnd() ((void)0)
+#define glVertex2f(x, y) ((void)0)
+#define glVertex2i(x, y) ((void)0)
+#define glVertex3f(x, y, z) ((void)0)
+#define glVertex3fv(v) ((void)0)
+#define glVertex3d(x, y, z) ((void)0)
+#define glVertex4f(x, y, z, w) ((void)0)
+#define glTexCoord2f(s, t) ((void)0)
+#define glTexCoord2d(s, t) ((void)0)
+#define glTexCoord2i(s, t) ((void)0)
+#define glTexCoord2fv(v) ((void)0)
+#define glNormal3f(nx, ny, nz) ((void)0)
+#define glNormal3fv(v) ((void)0)
+
+// ============================================================================
+// Helper macros for functions not in ES
+// ============================================================================
+
+#define glColor4fv(v) glColor4f((v)[0], (v)[1], (v)[2], (v)[3])
+#define glColor3fv(v) glColor4f((v)[0], (v)[1], (v)[2], 1.0f)
+#define glColor3f(r, g, b) glColor4f(r, g, b, 1.0f)
+
+// ============================================================================
+// Constants not in OpenGL ES 1.1
+// ============================================================================
+
+#ifndef GL_LINE
+#define GL_LINE 0x1B01
+#endif
+#ifndef GL_FILL
+#define GL_FILL 0x1B02
+#endif
+#ifndef GL_QUADS
+#define GL_QUADS 0x0007
+#endif
+#ifndef GL_QUAD_STRIP
+#define GL_QUAD_STRIP 0x0008
+#endif
+#ifndef GL_POLYGON
+#define GL_POLYGON 0x0009
+#endif
+#ifndef GL_UNSIGNED_INT_8_8_8_8_REV
+#define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
+#endif
+#ifndef GL_UNSIGNED_SHORT_1_5_5_5_REV
+#define GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
+#endif
+#ifndef GL_BGRA_EXT
+#define GL_BGRA_EXT 0x80E1
+#endif
+#ifndef GL_CLAMP
+#define GL_CLAMP GL_CLAMP_TO_EDGE
+#endif
+#ifndef GL_RGB5_A1
+#define GL_RGB5_A1 0x8057
+#endif
+#ifndef GL_DOUBLE
+#define GL_DOUBLE GL_FLOAT
+#endif
+
+// GL_UNSIGNED_INT is not supported by ES 1.1 glDrawElements but we define it
+// for compilation compatibility - the _gles_DrawElements wrapper handles conversion
+#ifndef GL_UNSIGNED_INT
+#define GL_UNSIGNED_INT 0x1405
+#endif
+
+// Blend function query constants (for state stack)
+#ifndef GL_BLEND_SRC
+#define GL_BLEND_SRC 0x0BE1
+#endif
+#ifndef GL_BLEND_DST
+#define GL_BLEND_DST 0x0BE0
+#endif
+
+// Texture coordinate generation constants
+#ifndef GL_S
+#define GL_S 0x2000
+#endif
+#ifndef GL_T
+#define GL_T 0x2001
+#endif
+#ifndef GL_R
+#define GL_R 0x2002
+#endif
+#ifndef GL_Q
+#define GL_Q 0x2003
+#endif
+#ifndef GL_TEXTURE_GEN_MODE
+#define GL_TEXTURE_GEN_MODE 0x2500
+#endif
+#ifndef GL_TEXTURE_GEN_S
+#define GL_TEXTURE_GEN_S 0x0C60
+#endif
+#ifndef GL_TEXTURE_GEN_T
+#define GL_TEXTURE_GEN_T 0x0C61
+#endif
+#ifndef GL_SPHERE_MAP
+#define GL_SPHERE_MAP 0x2402
+#endif
+
+// Texture environment constants
+#ifndef GL_TEXTURE0_ARB
+#define GL_TEXTURE0_ARB GL_TEXTURE0
+#endif
+#ifndef GL_TEXTURE1_ARB
+#define GL_TEXTURE1_ARB GL_TEXTURE1
+#endif
+#ifndef GL_COMBINE
+#define GL_COMBINE 0x8570
+#endif
+#ifndef GL_COMBINE_EXT
+#define GL_COMBINE_EXT 0x8570
+#endif
+#ifndef GL_COMBINE_RGB
+#define GL_COMBINE_RGB 0x8571
+#endif
+#ifndef GL_COMBINE_RGB_EXT
+#define GL_COMBINE_RGB_EXT 0x8571
+#endif
+#ifndef GL_ADD
+#define GL_ADD 0x0104
+#endif
+
+// ============================================================================
+// Extension function pointer types (for compatibility with extension loading)
+// ============================================================================
+
+typedef void (*PFNGLCLIENTACTIVETEXTUREARBPROC)(GLenum texture);
+typedef void (*PFNGLACTIVETEXTUREARBPROC)(GLenum texture);
+typedef void (*PFNGLMULTITEXCOORD2FARBPROC)(GLenum target, GLfloat s, GLfloat t);
+typedef void (*PFNGLMULTITEXCOORD2FVARBPROC)(GLenum target, const GLfloat *v);
+
+#endif // __ANDROID__

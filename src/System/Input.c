@@ -4,6 +4,7 @@
 
 #include "game.h"
 #include "mousesmoothing.h"
+#include "touchcontrols.h"
 
 
 /***************/
@@ -91,6 +92,9 @@ void InitInput(void)
 {
 	// Open a connected gamepad on startup.
 	TryOpenGamepad(true);
+
+	// Initialize touch controls for mobile devices
+	TouchControls_Init();
 }
 
 void UpdateInput(void)
@@ -171,8 +175,18 @@ void UpdateInput(void)
 			case SDL_EVENT_GAMEPAD_BUTTON_UP:
 				gUserPrefersGamepad = true;
 				break;
+
+			// Handle touch events for on-screen controls
+			case SDL_EVENT_FINGER_DOWN:
+			case SDL_EVENT_FINGER_MOTION:
+			case SDL_EVENT_FINGER_UP:
+				TouchControls_HandleEvent(&event);
+				break;
 		}
 	}
+
+	// Update touch controls state
+	TouchControls_Update();
 
 	// --------------------------------------------
 	// Refresh the state of each individual mouse button,
@@ -271,6 +285,64 @@ void UpdateInput(void)
 			}
 		}
 
+		// Check touch controls for on-screen buttons (mobile devices)
+		if (TouchControls_IsVisible())
+		{
+			switch (i)
+			{
+				case kNeed_Forward:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_UP);
+					break;
+				case kNeed_Backward:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_DOWN);
+					break;
+				case kNeed_TurnLeft:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_LEFT);
+					break;
+				case kNeed_TurnRight:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_RIGHT);
+					break;
+				case kNeed_Jump:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_JUMP);
+					break;
+				case kNeed_Shoot:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_SHOOT);
+					break;
+				case kNeed_PunchPickup:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PUNCH_PICKUP);
+					break;
+				case kNeed_PrevWeapon:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PREV_WEAPON);
+					break;
+				case kNeed_NextWeapon:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_NEXT_WEAPON);
+					break;
+				case kNeed_UIPause:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PAUSE);
+					break;
+				case kNeed_UIUp:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_UP);
+					break;
+				case kNeed_UIDown:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_DOWN);
+					break;
+				case kNeed_UILeft:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_LEFT);
+					break;
+				case kNeed_UIRight:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_DPAD_RIGHT);
+					break;
+				case kNeed_UIConfirm:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_JUMP);
+					break;
+				case kNeed_UIBack:
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PUNCH_PICKUP);
+					break;
+				default:
+					break;
+			}
+		}
+
 		UpdateKeyState(&gNeedStates[i], downNow);
 	}
 
@@ -294,6 +366,23 @@ void UpdateInput(void)
 		{
 			gPlayerInfo.analogControlX = thumbVec.x;
 			gPlayerInfo.analogControlZ = thumbVec.y;
+		}
+	}
+
+			/* CHECK TOUCH CONTROLS ANALOG INPUT */
+
+	if (TouchControls_IsVisible())
+	{
+		float touchX, touchY;
+		TouchControls_GetAnalog(&touchX, &touchY);
+		if (touchX != 0 || touchY != 0)
+		{
+			// Touch controls use screen Y-axis where down is positive
+			// Game uses Z-axis where forward (up on screen) is negative Z
+			if (fabsf(touchX) > fabsf(gPlayerInfo.analogControlX))
+				gPlayerInfo.analogControlX = touchX;
+			if (fabsf(touchY) > fabsf(gPlayerInfo.analogControlZ))
+				gPlayerInfo.analogControlZ = touchY;  // Touch Y maps to game Z
 		}
 	}
 

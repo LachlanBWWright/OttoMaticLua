@@ -1,0 +1,8 @@
+# This file should NOT be committed to version control.
+# It contains machine-specific paths to Android SDK/NDK.
+#
+# Example:
+# sdk.dir=/path/to/android/sdk
+# ndk.dir=/path/to/android/ndk
+
+# If this file is missing, the build will use ANDROID_HOME and ANDROID_NDK environment variables.
