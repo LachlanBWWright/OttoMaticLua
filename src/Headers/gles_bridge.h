@@ -93,8 +93,9 @@ typedef double GLdouble;
 #define GL_FOG_COLOR 0x0B66
 #endif
 #ifndef GL_LINEAR
-// Note: GL_LINEAR is 0x2601 for texture filters, but GL_LINEAR for fog is 0x2601 too.
-// In desktop GL, GL_LINEAR (0x2601) is used for both. Redefine if missing.
+// Note: GL_LINEAR (0x2601) should already be defined in GLES3/gl3.h for texture filters.
+// It's the same constant used for fog mode in desktop GL.
+#define GL_LINEAR 0x2601
 #endif
 #ifndef GL_NORMALIZE
 #define GL_NORMALIZE 0x0BA1
@@ -244,9 +245,9 @@ typedef double GLdouble;
 #define GL_MODULATE 0x2100
 #endif
 
-// Alpha test function constants
+// Alpha test function constant (also used for depth test in GLES 3.0)
 #ifndef GL_NOTEQUAL
-// GL_NOTEQUAL should already be defined (0x0205) for depth test
+#define GL_NOTEQUAL 0x0205
 #endif
 
 // Fog hint

@@ -22,8 +22,8 @@
 #define glTranslatef(x,y,z)             bridge_Translatef(x,y,z)
 #define glRotatef(a,x,y,z)             bridge_Rotatef(a,x,y,z)
 #define glScalef(x,y,z)                bridge_Scalef(x,y,z)
-#define glOrtho(l,r,b,t,n,f)           do { bridge_LoadIdentity(); bridge_Orthof((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f)); } while(0)
-#define glFrustum(l,r,b,t,n,f)         do { bridge_LoadIdentity(); bridge_Frustumf((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f)); } while(0)
+#define glOrtho(l,r,b,t,n,f)           bridge_Orthof((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f))
+#define glFrustum(l,r,b,t,n,f)         bridge_Frustumf((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f))
 
 // Immediate mode
 #define glBegin(mode)                    bridge_Begin(mode)
@@ -214,7 +214,9 @@
 #define GL_ADD 0x0104
 #endif
 
-// Extension function pointer types (for compatibility with extension loading)
+// Extension function pointer types for ARB multitexture compatibility
+// These types are used in ogl_functions.h to define function pointers that
+// map to the standard GLES glActiveTexture/glClientActiveTexture functions
 typedef void (*PFNGLCLIENTACTIVETEXTUREARBPROC)(GLenum texture);
 typedef void (*PFNGLACTIVETEXTUREARBPROC)(GLenum texture);
 typedef void (*PFNGLMULTITEXCOORD2FARBPROC)(GLenum target, GLfloat s, GLfloat t);
