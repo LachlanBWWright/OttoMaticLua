@@ -305,6 +305,10 @@ static void OGL_DisposeDrawContext(void)
 		return;
 	}
 
+#ifdef __ANDROID__
+	GLESBridge_Shutdown();
+#endif
+
 	SDL_GL_MakeCurrent(gSDLWindow, NULL);		// make context not current
 	SDL_GL_DestroyContext(gAGLContext);			// nuke context
 	gAGLContext = nil;

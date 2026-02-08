@@ -90,6 +90,10 @@
 #define glGetIntegerv(p,v)             bridge_GetIntegerv(p,v)
 #define glGetBooleanv(p,v)             bridge_GetBooleanv(p,v)
 
+// glLineWidth: GLES 3.0 only guarantees width 1.0, pass through but clamp
+// Most implementations actually support a range, so we try the requested width
+// The actual supported range can vary by device
+
 // Blend function tracking
 #define glBlendFunc(s,d)               bridge_BlendFunc(s,d)
 
