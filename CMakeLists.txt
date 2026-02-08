@@ -122,9 +122,9 @@ endif()
 add_subdirectory(extern/Pomme)
 
 if(ANDROID)
-	# Android uses OpenGL ES 1.1 for fixed-function pipeline support
-	# ES 1.1 provides vertex arrays, matrix stack, and lighting
-	find_library(GLES1_LIBRARY GLESv1_CM)  # OpenGL ES 1.1 with fixed function pipeline
+	# Android uses OpenGL ES 3.0 with shader-based fixed-function emulation
+	# ES 3.0 provides programmable pipeline, VAOs, and GL_UNSIGNED_INT indices
+	find_library(GLES3_LIBRARY GLESv3)  # OpenGL ES 3.0 programmable pipeline
 	find_library(EGL_LIBRARY EGL)
 	find_library(ANDROID_LOG_LIBRARY log)
 	find_library(ANDROID_LIBRARY android)
@@ -251,10 +251,10 @@ endif()
 
 # Link core dependencies
 if(ANDROID)
-	# Android uses OpenGL ES 1.1 for fixed-function pipeline support
+	# Android uses OpenGL ES 3.0 with shader-based fixed-function emulation
 	target_link_libraries(${GAME_TARGET} PRIVATE 
 		Pomme 
-		${GLES1_LIBRARY}
+		${GLES3_LIBRARY}
 		${EGL_LIBRARY}
 		${ANDROID_LOG_LIBRARY}
 		${ANDROID_LIBRARY}

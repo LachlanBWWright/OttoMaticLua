@@ -1,109 +1,114 @@
-// OPENGL ES 1.1 COMPATIBILITY HEADER FOR ANDROID
-// Provides compatibility shims for desktop OpenGL functions
-// that don't exist in OpenGL ES 1.1
+// OPENGL ES 3.0 COMPATIBILITY HEADER FOR ANDROID
+// Redirects fixed-function OpenGL calls to the GLES 3.0 Bridge
+// which provides shader-based emulation of the fixed-function pipeline
 
 #pragma once
 
 #ifdef __ANDROID__
 
-#include <GLES/gl.h>
-#include <GLES/glext.h>
-#include <stdlib.h>
-#include <android/log.h>
-
-#define GLES_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "GLES_Compat", __VA_ARGS__)
-#define GLES_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "GLES_Compat", __VA_ARGS__)
+#include "gles_bridge.h"
 
 // ============================================================================
-// Function mappings (desktop to ES)
-// OpenGL ES 1.1 uses float versions of these functions
+// Function redirections: Desktop OpenGL -> GLES 3.0 Bridge
 // ============================================================================
 
-#define glOrtho(left,right,bottom,top,zNear,zFar) glOrthof((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
-#define glFrustum(left,right,bottom,top,zNear,zFar) glFrustumf((float)(left),(float)(right),(float)(bottom),(float)(top),(float)(zNear),(float)(zFar))
-#define glClearDepth(depth) glClearDepthf((float)(depth))
-#define glDepthRange(zNear,zFar) glDepthRangef((float)(zNear),(float)(zFar))
+// Matrix operations
+#define glMatrixMode(mode)               bridge_MatrixMode(mode)
+#define glPushMatrix()                   bridge_PushMatrix()
+#define glPopMatrix()                    bridge_PopMatrix()
+#define glLoadIdentity()                 bridge_LoadIdentity()
+#define glLoadMatrixf(m)                 bridge_LoadMatrixf(m)
+#define glMultMatrixf(m)                 bridge_MultMatrixf(m)
+#define glTranslatef(x,y,z)             bridge_Translatef(x,y,z)
+#define glRotatef(a,x,y,z)             bridge_Rotatef(a,x,y,z)
+#define glScalef(x,y,z)                bridge_Scalef(x,y,z)
+#define glOrtho(l,r,b,t,n,f)           do { bridge_LoadIdentity(); bridge_Orthof((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f)); } while(0)
+#define glFrustum(l,r,b,t,n,f)         do { bridge_LoadIdentity(); bridge_Frustumf((float)(l),(float)(r),(float)(b),(float)(t),(float)(n),(float)(f)); } while(0)
+
+// Immediate mode
+#define glBegin(mode)                    bridge_Begin(mode)
+#define glEnd()                          bridge_End()
+#define glVertex2f(x,y)                 bridge_Vertex2f(x,y)
+#define glVertex2i(x,y)                 bridge_Vertex2i(x,y)
+#define glVertex3f(x,y,z)              bridge_Vertex3f(x,y,z)
+#define glVertex3fv(v)                  bridge_Vertex3fv(v)
+#define glVertex3d(x,y,z)              bridge_Vertex3d(x,y,z)
+#define glVertex4f(x,y,z,w)            bridge_Vertex4f(x,y,z,w)
+#define glTexCoord2f(s,t)              bridge_TexCoord2f(s,t)
+#define glTexCoord2d(s,t)              bridge_TexCoord2d(s,t)
+#define glTexCoord2i(s,t)              bridge_TexCoord2i(s,t)
+#define glTexCoord2fv(v)               bridge_TexCoord2fv(v)
+#define glNormal3f(x,y,z)             bridge_Normal3f(x,y,z)
+#define glNormal3fv(v)                 bridge_Normal3fv(v)
+
+// Color
+#define glColor4f(r,g,b,a)            bridge_Color4f(r,g,b,a)
+#define glColor3f(r,g,b)              bridge_Color3f(r,g,b)
+#define glColor4fv(v)                  bridge_Color4fv(v)
+#define glColor3fv(v)                  bridge_Color3fv(v)
+
+// Enable/Disable (intercept all to handle emulated caps)
+#define glEnable(cap)                    bridge_Enable(cap)
+#define glDisable(cap)                   bridge_Disable(cap)
+#define glIsEnabled(cap)                 bridge_IsEnabled(cap)
+
+// Lighting
+#define glLightfv(l,p,v)               bridge_Lightfv(l,p,v)
+#define glLightModelfv(p,v)            bridge_LightModelfv(p,v)
+#define glLightModelf(p,v)             bridge_LightModelf(p,v)
+#define glLightModeli(p,v)             bridge_LightModeli(p,v)
+#define glMaterialfv(f,p,v)            bridge_Materialfv(f,p,v)
+#define glColorMaterial(f,m)           bridge_ColorMaterial(f,m)
+
+// Fog
+#define glFogf(p,v)                    bridge_Fogf(p,v)
+#define glFogfv(p,v)                   bridge_Fogfv(p,v)
+#define glFogi(p,v)                    bridge_Fogi(p,v)
+#define glFogiv(p,v)                   ((void)0)
+
+// Texture environment
+#define glTexEnvi(t,p,v)               bridge_TexEnvi(t,p,v)
+
+// Alpha test
+#define glAlphaFunc(f,r)               bridge_AlphaFunc(f,r)
+
+// Vertex arrays (fixed-function style)
+#define glEnableClientState(cap)         bridge_EnableClientState(cap)
+#define glDisableClientState(cap)        bridge_DisableClientState(cap)
+#define glVertexPointer(s,t,st,p)      bridge_VertexPointer(s,t,st,p)
+#define glNormalPointer(t,st,p)        bridge_NormalPointer(t,st,p)
+#define glColorPointer(s,t,st,p)       bridge_ColorPointer(s,t,st,p)
+#define glTexCoordPointer(s,t,st,p)    bridge_TexCoordPointer(s,t,st,p)
+#define glClientActiveTextureARB(t)     bridge_ClientActiveTexture(t)
+
+// Draw calls (intercept to setup shader state)
+#define glDrawArrays(m,f,c)            bridge_DrawArrays(m,f,c)
+#define glDrawElements(m,c,t,i)        bridge_DrawElements(m,c,t,i)
+
+// State queries
+#define glGetFloatv(p,v)               bridge_GetFloatv(p,v)
+#define glGetIntegerv(p,v)             bridge_GetIntegerv(p,v)
+#define glGetBooleanv(p,v)             bridge_GetBooleanv(p,v)
+
+// Blend function tracking
+#define glBlendFunc(s,d)               bridge_BlendFunc(s,d)
+
+// Depth mask tracking
+#define glDepthMask(f)                 bridge_DepthMask(f)
+
+// Misc stubs
+#define glPolygonMode(f,m)             bridge_PolygonMode(f,m)
+#define glTexGeni(c,p,v)               bridge_TexGeni(c,p,v)
+#define glTexGenf(c,p,v)               bridge_TexGenf(c,p,v)
+#define glTexGenfv(c,p,v)              bridge_TexGenfv(c,p,v)
+#define glHint(t,m)                    bridge_Hint(t,m)
+
+// Depth functions - these exist natively in GLES 3.0 but with float params
+#define glClearDepth(d)                glClearDepthf((float)(d))
+#define glDepthRange(n,f)              glDepthRangef((float)(n),(float)(f))
 
 // ============================================================================
-// glDrawElements wrapper for GL_UNSIGNED_INT -> GL_UNSIGNED_SHORT conversion
-// OpenGL ES 1.1 doesn't support GL_UNSIGNED_INT indices
-// ============================================================================
-
-static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
-{
-    if (type == GL_UNSIGNED_INT)
-    {
-        // Convert 32-bit indices to 16-bit
-        const GLuint *src = (const GLuint *)indices;
-        GLushort *tmp = (GLushort *)malloc(count * sizeof(GLushort));
-        if (tmp)
-        {
-            for (GLsizei i = 0; i < count; i++)
-            {
-                // Truncate to 16-bit - models should have <65536 vertices
-                tmp[i] = (GLushort)(src[i] & 0xFFFF);
-            }
-            glDrawElements(mode, count, GL_UNSIGNED_SHORT, tmp);
-            free(tmp);
-        }
-        else
-        {
-            GLES_LOGE("_gles_DrawElements: Failed to allocate %d bytes for index conversion",
-                      (int)(count * sizeof(GLushort)));
-        }
-    }
-    else
-    {
-        glDrawElements(mode, count, type, indices);
-    }
-}
-
-// Replace glDrawElements calls that use GL_UNSIGNED_INT
-#define glDrawElements(mode, count, type, indices) _gles_DrawElements(mode, count, type, indices)
-
-// ============================================================================
-// Stubbed functions (not available in ES 1.1)
-// ============================================================================
-
-#define glColorMaterial(face, mode) ((void)0)
-#define glFogi(pname, param) ((void)0)
-#define glFogiv(pname, params) ((void)0)
-#define glPolygonMode(face, mode) ((void)0)
-#define glTexGeni(coord, pname, param) ((void)0)
-#define glTexGenf(coord, pname, param) ((void)0)
-#define glTexGenfv(coord, pname, params) ((void)0)
-#define glLightModeli(pname, param) glLightModelf(pname, (GLfloat)(param))
-
-// ============================================================================
-// Immediate mode stubs (not in ES - stubbed to no-op)
-// These effects won't render but game logic still works
-// ============================================================================
-
-#define glBegin(mode) ((void)0)
-#define glEnd() ((void)0)
-#define glVertex2f(x, y) ((void)0)
-#define glVertex2i(x, y) ((void)0)
-#define glVertex3f(x, y, z) ((void)0)
-#define glVertex3fv(v) ((void)0)
-#define glVertex3d(x, y, z) ((void)0)
-#define glVertex4f(x, y, z, w) ((void)0)
-#define glTexCoord2f(s, t) ((void)0)
-#define glTexCoord2d(s, t) ((void)0)
-#define glTexCoord2i(s, t) ((void)0)
-#define glTexCoord2fv(v) ((void)0)
-#define glNormal3f(nx, ny, nz) ((void)0)
-#define glNormal3fv(v) ((void)0)
-
-// ============================================================================
-// Helper macros for functions not in ES
-// ============================================================================
-
-#define glColor4fv(v) glColor4f((v)[0], (v)[1], (v)[2], (v)[3])
-#define glColor3fv(v) glColor4f((v)[0], (v)[1], (v)[2], 1.0f)
-#define glColor3f(r, g, b) glColor4f(r, g, b, 1.0f)
-
-// ============================================================================
-// Constants not in OpenGL ES 1.1
+// Constants not in OpenGL ES 3.0
 // ============================================================================
 
 #ifndef GL_LINE
@@ -140,10 +145,16 @@ static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, c
 #define GL_DOUBLE GL_FLOAT
 #endif
 
-// GL_UNSIGNED_INT is not supported by ES 1.1 glDrawElements but we define it
-// for compilation compatibility - the _gles_DrawElements wrapper handles conversion
-#ifndef GL_UNSIGNED_INT
-#define GL_UNSIGNED_INT 0x1405
+// GL_LUMINANCE and GL_LUMINANCE_ALPHA are not core in GLES 3.0 but
+// we define them for compilation; texture conversion handles the actual format
+#ifndef GL_LUMINANCE
+#define GL_LUMINANCE 0x1909
+#endif
+#ifndef GL_LUMINANCE_ALPHA
+#define GL_LUMINANCE_ALPHA 0x190A
+#endif
+#ifndef GL_ALPHA
+#define GL_ALPHA 0x1906
 #endif
 
 // Blend function query constants (for state stack)
@@ -203,10 +214,7 @@ static inline void _gles_DrawElements(GLenum mode, GLsizei count, GLenum type, c
 #define GL_ADD 0x0104
 #endif
 
-// ============================================================================
 // Extension function pointer types (for compatibility with extension loading)
-// ============================================================================
-
 typedef void (*PFNGLCLIENTACTIVETEXTUREARBPROC)(GLenum texture);
 typedef void (*PFNGLACTIVETEXTUREARBPROC)(GLenum texture);
 typedef void (*PFNGLMULTITEXCOORD2FARBPROC)(GLenum target, GLfloat s, GLfloat t);

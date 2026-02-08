@@ -331,17 +331,17 @@ retryVideo:
 	}
 
 #ifdef __ANDROID__
-	// On Android, use OpenGL ES 1.1 for fixed-function pipeline support
+	// On Android, use OpenGL ES 3.0 for shader-based rendering
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	
 	// Android windows are fullscreen by default
 	gSDLWindow = SDL_CreateWindow(
 		GAME_FULL_NAME " " GAME_VERSION, 0, 0,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
 	
-	LOGI("Created Android window with OpenGL ES 1.1");
+	LOGI("Created Android window with OpenGL ES 3.0");
 #else
 	// Create window
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);

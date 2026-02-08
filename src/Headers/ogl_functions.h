@@ -2,11 +2,11 @@
 
 #ifdef __ANDROID__
 #include "gles_compat.h"
-// On Android, use glActiveTexture and glClientActiveTexture directly (they're in ES 1.1)
+// On Android with GLES 3.0, use glActiveTexture directly
 #define glActiveTextureARB glActiveTexture
-#define glClientActiveTextureARB glClientActiveTexture
-// No-op init on Android
-#define OGL_InitFunctions() ((void)0)
+// glClientActiveTextureARB is handled by the bridge (redirected in gles_compat.h)
+// Initialize the GLES 3.0 bridge
+#define OGL_InitFunctions() GLESBridge_Init()
 #else
 #include <SDL3/SDL_opengl.h>
 
