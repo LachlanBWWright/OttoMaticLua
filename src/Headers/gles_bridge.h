@@ -13,6 +13,9 @@
 #include <math.h>
 #include <android/log.h>
 
+// GLdouble doesn't exist in GLES 3.0 - typedef it
+typedef double GLdouble;
+
 #define BRIDGE_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "GLESBridge", __VA_ARGS__)
 #define BRIDGE_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "GLESBridge", __VA_ARGS__)
 #define BRIDGE_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "GLESBridge", __VA_ARGS__)
@@ -394,6 +397,13 @@ void bridge_TexGeni(GLenum coord, GLenum pname, GLint param);
 void bridge_TexGenf(GLenum coord, GLenum pname, GLfloat param);
 void bridge_TexGenfv(GLenum coord, GLenum pname, const GLfloat *params);
 void bridge_Hint(GLenum target, GLenum mode);
+
+// ============================================================================
+// Blend and depth mask tracking
+// ============================================================================
+
+void bridge_BlendFunc(GLenum sfactor, GLenum dfactor);
+void bridge_DepthMask(GLboolean flag);
 
 // ============================================================================
 // Shader state synchronization (called before draw calls)
