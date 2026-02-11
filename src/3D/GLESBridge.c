@@ -827,6 +827,7 @@ void bridge_End(void)
     glDisableVertexAttribArray(ATTR_NORMAL);
     glDisableVertexAttribArray(ATTR_TEXCOORD);
     glDisableVertexAttribArray(ATTR_COLOR);
+    glDisableVertexAttribArray(ATTR_TEXCOORD1);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
