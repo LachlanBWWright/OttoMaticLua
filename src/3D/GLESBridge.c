@@ -181,7 +181,18 @@ static const char* sFragmentShaderSource =
 // ============================================================================
 
 static GLuint sShaderProgram = 0;
-static GLuint sVAO = 0;
+static GLuint sVAO = 0;        // VAO for immediate mode (uses sImmVBO)
+static GLuint sArrayVAO = 0;   // Separate VAO for vertex-array draws (uses streaming VBOs)
+
+// Streaming VBOs for vertex-array draw path
+// Many Android GLES 3.0 drivers don't support client-side arrays with non-default VAOs,
+// so we upload all client data to streaming VBOs before drawing.
+static GLuint sStreamVBO_pos = 0;
+static GLuint sStreamVBO_norm = 0;
+static GLuint sStreamVBO_tc0 = 0;
+static GLuint sStreamVBO_color = 0;
+static GLuint sStreamVBO_tc1 = 0;
+static GLuint sStreamIBO = 0;
 
 // Uniform locations
 static GLint sLoc_projection = -1;
@@ -485,8 +496,19 @@ void GLESBridge_Init(void)
     // Create VAO for immediate mode
     glGenVertexArrays(1, &sVAO);
 
+    // Create separate VAO for vertex-array draws (prevents VBO state contamination)
+    glGenVertexArrays(1, &sArrayVAO);
+
     // Create VBO for immediate mode
     glGenBuffers(1, &sImmVBO);
+
+    // Create streaming VBOs for vertex-array draw path
+    glGenBuffers(1, &sStreamVBO_pos);
+    glGenBuffers(1, &sStreamVBO_norm);
+    glGenBuffers(1, &sStreamVBO_tc0);
+    glGenBuffers(1, &sStreamVBO_color);
+    glGenBuffers(1, &sStreamVBO_tc1);
+    glGenBuffers(1, &sStreamIBO);
 
     // Use our shader
     glUseProgram(sShaderProgram);
@@ -506,10 +528,19 @@ void GLESBridge_Shutdown(void)
         glDeleteVertexArrays(1, &sVAO);
         sVAO = 0;
     }
+    if (sArrayVAO) {
+        glDeleteVertexArrays(1, &sArrayVAO);
+        sArrayVAO = 0;
+    }
     if (sImmVBO) {
         glDeleteBuffers(1, &sImmVBO);
         sImmVBO = 0;
     }
+    GLuint streamBufs[] = {sStreamVBO_pos, sStreamVBO_norm, sStreamVBO_tc0,
+                           sStreamVBO_color, sStreamVBO_tc1, sStreamIBO};
+    glDeleteBuffers(6, streamBufs);
+    sStreamVBO_pos = sStreamVBO_norm = sStreamVBO_tc0 = 0;
+    sStreamVBO_color = sStreamVBO_tc1 = sStreamIBO = 0;
 }
 
 // ============================================================================
@@ -1263,66 +1294,128 @@ void bridge_ActiveTexture(GLenum texture)
 }
 
 // ============================================================================
-// Vertex array draw setup
+// Vertex array draw setup - uploads client data to streaming VBOs
+// Many Android GLES 3.0 drivers produce GL_INVALID_OPERATION (0x502) when
+// using client-side vertex/index arrays with non-default VAOs. We fix this
+// by always uploading to streaming VBOs before drawing.
 // ============================================================================
 
-static void SetupVertexAttribsForArrayDraw(void)
+static GLsizei GetTypeSize(GLenum type)
+{
+    switch (type) {
+        case GL_FLOAT:          return 4;
+        case GL_UNSIGNED_BYTE:  return 1;
+        case GL_BYTE:           return 1;
+        case GL_SHORT:          return 2;
+        case GL_UNSIGNED_SHORT: return 2;
+        case GL_INT:            return 4;
+        case GL_UNSIGNED_INT:   return 4;
+        default:                return 4;
+    }
+}
+
+static GLsizei FindMaxIndex(const void *indices, GLsizei count, GLenum type)
+{
+    GLsizei maxIdx = 0;
+    if (type == GL_UNSIGNED_INT) {
+        const GLuint *idx = (const GLuint *)indices;
+        for (GLsizei i = 0; i < count; i++)
+            if ((GLsizei)idx[i] > maxIdx) maxIdx = (GLsizei)idx[i];
+    } else if (type == GL_UNSIGNED_SHORT) {
+        const GLushort *idx = (const GLushort *)indices;
+        for (GLsizei i = 0; i < count; i++)
+            if ((GLsizei)idx[i] > maxIdx) maxIdx = (GLsizei)idx[i];
+    } else { // GL_UNSIGNED_BYTE
+        const GLubyte *idx = (const GLubyte *)indices;
+        for (GLsizei i = 0; i < count; i++)
+            if ((GLsizei)idx[i] > maxIdx) maxIdx = (GLsizei)idx[i];
+    }
+    return maxIdx;
+}
+
+static void SetupVertexAttribsWithVBOs(GLsizei numVertices)
 {
     bridge_SyncShaderState();
 
-    glBindVertexArray(sVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);  // We're using client-side arrays
+    glBindVertexArray(sArrayVAO);
 
     // Position
-    if (sVertexArrayEnabled && sVertexArrayPtr) {
+    if (sVertexArrayEnabled && sVertexArrayPtr && numVertices > 0) {
+        GLsizei compSize = GetTypeSize(sVertexArrayType);
+        GLsizei stride = sVertexArrayStride ? sVertexArrayStride : (sVertexArraySize * compSize);
+        GLsizei dataSize = numVertices * stride;
+        glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_pos);
+        glBufferData(GL_ARRAY_BUFFER, dataSize, sVertexArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_POSITION);
         glVertexAttribPointer(ATTR_POSITION, sVertexArraySize, sVertexArrayType,
-                              GL_FALSE, sVertexArrayStride, sVertexArrayPtr);
+                              GL_FALSE, sVertexArrayStride, (void*)0);
     } else {
         glDisableVertexAttribArray(ATTR_POSITION);
     }
 
     // Normal
-    if (sNormalArrayEnabled && sNormalArrayPtr) {
+    if (sNormalArrayEnabled && sNormalArrayPtr && numVertices > 0) {
+        GLsizei compSize = GetTypeSize(sNormalArrayType);
+        GLsizei stride = sNormalArrayStride ? sNormalArrayStride : (3 * compSize);
+        GLsizei dataSize = numVertices * stride;
+        glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_norm);
+        glBufferData(GL_ARRAY_BUFFER, dataSize, sNormalArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_NORMAL);
         glVertexAttribPointer(ATTR_NORMAL, 3, sNormalArrayType,
-                              GL_FALSE, sNormalArrayStride, sNormalArrayPtr);
+                              GL_FALSE, sNormalArrayStride, (void*)0);
     } else {
         glDisableVertexAttribArray(ATTR_NORMAL);
         glVertexAttrib3fv(ATTR_NORMAL, sCurrentNormal);
     }
 
     // TexCoord
-    if (sTexCoordArrayEnabled && sTexCoordArrayPtr) {
+    if (sTexCoordArrayEnabled && sTexCoordArrayPtr && numVertices > 0) {
+        GLsizei compSize = GetTypeSize(sTexCoordArrayType);
+        GLsizei stride = sTexCoordArrayStride ? sTexCoordArrayStride : (sTexCoordArraySize * compSize);
+        GLsizei dataSize = numVertices * stride;
+        glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_tc0);
+        glBufferData(GL_ARRAY_BUFFER, dataSize, sTexCoordArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_TEXCOORD);
         glVertexAttribPointer(ATTR_TEXCOORD, sTexCoordArraySize, sTexCoordArrayType,
-                              GL_FALSE, sTexCoordArrayStride, sTexCoordArrayPtr);
+                              GL_FALSE, sTexCoordArrayStride, (void*)0);
     } else {
         glDisableVertexAttribArray(ATTR_TEXCOORD);
         glVertexAttrib2fv(ATTR_TEXCOORD, sCurrentTexCoord);
     }
 
     // Color
-    if (sColorArrayEnabled && sColorArrayPtr) {
-        glEnableVertexAttribArray(ATTR_COLOR);
+    if (sColorArrayEnabled && sColorArrayPtr && numVertices > 0) {
         GLboolean normalize = (sColorArrayType == GL_UNSIGNED_BYTE) ? GL_TRUE : GL_FALSE;
+        GLsizei compSize = GetTypeSize(sColorArrayType);
+        GLsizei stride = sColorArrayStride ? sColorArrayStride : (sColorArraySize * compSize);
+        GLsizei dataSize = numVertices * stride;
+        glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_color);
+        glBufferData(GL_ARRAY_BUFFER, dataSize, sColorArrayPtr, GL_STREAM_DRAW);
+        glEnableVertexAttribArray(ATTR_COLOR);
         glVertexAttribPointer(ATTR_COLOR, sColorArraySize, sColorArrayType,
-                              normalize, sColorArrayStride, sColorArrayPtr);
+                              normalize, sColorArrayStride, (void*)0);
     } else {
         glDisableVertexAttribArray(ATTR_COLOR);
         glVertexAttrib4fv(ATTR_COLOR, sCurrentColor);
     }
 
     // TexCoord1 (multi-texture unit 1)
-    if (sTexCoord1ArrayEnabled && sTexCoord1ArrayPtr) {
+    if (sTexCoord1ArrayEnabled && sTexCoord1ArrayPtr && numVertices > 0) {
+        GLsizei compSize = GetTypeSize(sTexCoord1ArrayType);
+        GLsizei stride = sTexCoord1ArrayStride ? sTexCoord1ArrayStride : (sTexCoord1ArraySize * compSize);
+        GLsizei dataSize = numVertices * stride;
+        glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_tc1);
+        glBufferData(GL_ARRAY_BUFFER, dataSize, sTexCoord1ArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_TEXCOORD1);
         glVertexAttribPointer(ATTR_TEXCOORD1, sTexCoord1ArraySize, sTexCoord1ArrayType,
-                              GL_FALSE, sTexCoord1ArrayStride, sTexCoord1ArrayPtr);
+                              GL_FALSE, sTexCoord1ArrayStride, (void*)0);
     } else {
         glDisableVertexAttribArray(ATTR_TEXCOORD1);
         GLfloat defaultTC1[2] = {0, 0};
         glVertexAttrib2fv(ATTR_TEXCOORD1, defaultTC1);
     }
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 static void CleanupVertexAttribs(void)
@@ -1332,6 +1425,8 @@ static void CleanupVertexAttribs(void)
     glDisableVertexAttribArray(ATTR_TEXCOORD);
     glDisableVertexAttribArray(ATTR_COLOR);
     glDisableVertexAttribArray(ATTR_TEXCOORD1);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
 
@@ -1341,15 +1436,28 @@ static void CleanupVertexAttribs(void)
 
 void bridge_DrawArrays(GLenum mode, GLint first, GLsizei count)
 {
-    SetupVertexAttribsForArrayDraw();
+    GLsizei numVertices = first + count;
+    SetupVertexAttribsWithVBOs(numVertices);
     glDrawArrays(mode, first, count);
     CleanupVertexAttribs();
 }
 
 void bridge_DrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
 {
-    SetupVertexAttribsForArrayDraw();
-    glDrawElements(mode, count, type, indices);
+    // Find max index to determine how many vertices we need to upload
+    GLsizei maxIdx = FindMaxIndex(indices, count, type);
+    GLsizei numVertices = maxIdx + 1;
+
+    SetupVertexAttribsWithVBOs(numVertices);
+
+    // Upload index data to streaming element buffer
+    GLsizei indexSize = count * GetTypeSize(type);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sStreamIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexSize, indices, GL_STREAM_DRAW);
+
+    // Draw with VBO-based indices (offset 0)
+    glDrawElements(mode, count, type, (void*)0);
+
     CleanupVertexAttribs();
 }
 
