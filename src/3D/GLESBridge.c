@@ -49,7 +49,6 @@ static const char* sVertexShaderSource =
     "// Texture generation (sphere mapping)\n"
     "uniform bool u_texGenSEnabled;\n"
     "uniform bool u_texGenTEnabled;\n"
-    "uniform int u_texGenMode;\n"  // 0 = sphere map
     "\n"
     "out vec4 v_color;\n"
     "out vec2 v_texcoord;\n"
@@ -218,7 +217,6 @@ static GLint sLoc_texture1 = -1;
 static GLint sLoc_texEnvMode1 = -1;
 static GLint sLoc_texGenSEnabled = -1;
 static GLint sLoc_texGenTEnabled = -1;
-static GLint sLoc_texGenMode = -1;
 
 // Matrix stacks
 static BridgeMatrixStack sModelviewStack;
@@ -296,7 +294,6 @@ static const void* sTexCoord1ArrayPtr = NULL;
 // Texture generation state (sphere mapping)
 static GLboolean sTexGenSEnabled = GL_FALSE;
 static GLboolean sTexGenTEnabled = GL_FALSE;
-static GLint sTexGenMode = 0;  // 0 = sphere map
 
 // Immediate mode state
 static GLenum sImmMode = GL_TRIANGLES;
@@ -464,7 +461,6 @@ void GLESBridge_Init(void)
     sLoc_texEnvMode1 = glGetUniformLocation(sShaderProgram, "u_texEnvMode1");
     sLoc_texGenSEnabled = glGetUniformLocation(sShaderProgram, "u_texGenSEnabled");
     sLoc_texGenTEnabled = glGetUniformLocation(sShaderProgram, "u_texGenTEnabled");
-    sLoc_texGenMode = glGetUniformLocation(sShaderProgram, "u_texGenMode");
 
     // Initialize matrix stacks
     sModelviewStack.top = 0;
@@ -695,7 +691,6 @@ void bridge_SyncShaderState(void)
     glUniform1i(sLoc_texEnvMode1, sTexEnvMode1);
     glUniform1i(sLoc_texGenSEnabled, sTexGenSEnabled);
     glUniform1i(sLoc_texGenTEnabled, sTexGenTEnabled);
-    glUniform1i(sLoc_texGenMode, sTexGenMode);
 
     // Alpha test
     glUniform1i(sLoc_alphaTestEnabled, sAlphaTestEnabled);
@@ -1137,18 +1132,27 @@ void bridge_Fogi(GLenum pname, GLint param)
 void bridge_TexEnvi(GLenum target, GLenum pname, GLint param)
 {
     (void)target;
-    // Track texture environment mode for multi-texture combining
+    // Track texture environment mode for multi-texture combining.
+    // We only update unit 1's mode when unit 1 is the active texture,
+    // which is the case when the game calls this after glActiveTextureARB(GL_TEXTURE1).
+    if (sActiveTexture != GL_TEXTURE1) {
+        return;  // Only track for texture unit 1; unit 0 always uses modulate
+    }
     if (pname == GL_TEXTURE_ENV_MODE) {
-        // Only track for texture unit 1 (the active multi-texture unit)
-        // The game sets glActiveTextureARB(GL_TEXTURE1) before calling this
         if (param == GL_MODULATE) {
             sTexEnvMode1 = 0;
-        } else if (param == GL_ADD || param == GL_COMBINE) {
+        } else if (param == GL_ADD) {
             sTexEnvMode1 = 1;  // ADD
+        } else if (param == GL_COMBINE || param == GL_COMBINE_EXT) {
+            // GL_COMBINE uses additional parameters (GL_COMBINE_RGB) to set the actual operation.
+            // The game only uses GL_COMBINE + GL_ADD via GL_COMBINE_RGB, which we handle below.
+            // Default to modulate until GL_COMBINE_RGB is set.
+            sTexEnvMode1 = 0;
         } else if (param == GL_REPLACE) {
             sTexEnvMode1 = 2;
         }
-    } else if (pname == GL_COMBINE_RGB) {
+    } else if (pname == GL_COMBINE_RGB || pname == GL_COMBINE_RGB_EXT) {
+        // This is called after GL_TEXTURE_ENV_MODE = GL_COMBINE to specify the RGB combine operation
         if (param == GL_ADD) {
             sTexEnvMode1 = 1;
         }
@@ -1429,12 +1433,9 @@ void bridge_PolygonMode(GLenum face, GLenum mode)
 
 void bridge_TexGeni(GLenum coord, GLenum pname, GLint param)
 {
-    (void)coord;
-    if (pname == GL_TEXTURE_GEN_MODE) {
-        if (param == GL_SPHERE_MAP) {
-            sTexGenMode = 0;  // sphere map
-        }
-    }
+    (void)coord; (void)pname; (void)param;
+    // The game only uses sphere map mode (GL_SPHERE_MAP) for texgen.
+    // The sphere map computation is always active when texgen S/T are enabled.
 }
 
 void bridge_TexGenf(GLenum coord, GLenum pname, GLfloat param)

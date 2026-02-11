@@ -124,6 +124,12 @@ typedef double GLdouble;
 #ifndef GL_TEXTURE_ENV_MODE
 #define GL_TEXTURE_ENV_MODE 0x2200
 #endif
+#ifndef GL_MODULATE
+#define GL_MODULATE 0x2100
+#endif
+#ifndef GL_REPLACE
+#define GL_REPLACE 0x1E01
+#endif
 
 // Missing topology constants for GLES 3.0
 #ifndef GL_QUADS
@@ -240,9 +246,6 @@ typedef double GLdouble;
 #endif
 #ifndef GL_ADD
 #define GL_ADD 0x0104
-#endif
-#ifndef GL_MODULATE
-#define GL_MODULATE 0x2100
 #endif
 
 // Alpha test function constant (also used for depth test in GLES 3.0)
