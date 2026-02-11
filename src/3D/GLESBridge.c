@@ -806,7 +806,7 @@ void bridge_End(void)
         glVertexAttrib2fv(ATTR_TEXCOORD1, defaultTC1);
     }
 
-    // Convert quads to triangles
+    // Convert quads to triangles using IBO (avoid client-side indices)
     if (sImmMode == GL_QUADS) {
         // Every 4 vertices forms a quad -> 2 triangles
         int numQuads = sImmVertexCount / 4;
@@ -822,7 +822,11 @@ void bridge_End(void)
                 indices[q*6+4] = base + 2;
                 indices[q*6+5] = base + 3;
             }
-            glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_SHORT, indices);
+            // Upload to IBO to avoid client-side index errors on Android
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sStreamIBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, numIndices * sizeof(GLushort), indices, GL_STREAM_DRAW);
+            glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_SHORT, (void*)0);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
             free(indices);
         }
     }
@@ -841,7 +845,11 @@ void bridge_End(void)
                 indices[q*6+4] = base + 3;
                 indices[q*6+5] = base + 2;
             }
-            glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_SHORT, indices);
+            // Upload to IBO to avoid client-side index errors on Android
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sStreamIBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, numIndices * sizeof(GLushort), indices, GL_STREAM_DRAW);
+            glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_SHORT, (void*)0);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
             free(indices);
         }
     }
@@ -859,6 +867,7 @@ void bridge_End(void)
     glDisableVertexAttribArray(ATTR_TEXCOORD);
     glDisableVertexAttribArray(ATTR_COLOR);
     glDisableVertexAttribArray(ATTR_TEXCOORD1);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
