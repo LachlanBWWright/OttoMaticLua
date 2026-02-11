@@ -768,6 +768,13 @@ void bridge_End(void)
     glVertexAttribPointer(ATTR_COLOR, 4, GL_FLOAT, GL_FALSE,
                           IMM_FLOATS_PER_VERTEX * sizeof(GLfloat), (void*)(8 * sizeof(GLfloat)));
 
+    // TexCoord1 - immediate mode doesn't use multi-texture, set default
+    glDisableVertexAttribArray(ATTR_TEXCOORD1);
+    {
+        GLfloat defaultTC1[2] = {0, 0};
+        glVertexAttrib2fv(ATTR_TEXCOORD1, defaultTC1);
+    }
+
     // Convert quads to triangles
     if (sImmMode == GL_QUADS) {
         // Every 4 vertices forms a quad -> 2 triangles
