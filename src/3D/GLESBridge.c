@@ -1326,6 +1326,8 @@ static GLsizei GetTypeSize(GLenum type)
 static GLsizei FindMaxIndex(const void *indices, GLsizei count, GLenum type)
 {
     GLsizei maxIdx = 0;
+    if (!indices || count <= 0)
+        return 0;
     if (type == GL_UNSIGNED_INT) {
         const GLuint *idx = (const GLuint *)indices;
         for (GLsizei i = 0; i < count; i++)
@@ -1450,6 +1452,8 @@ static void CleanupVertexAttribs(void)
 
 void bridge_DrawArrays(GLenum mode, GLint first, GLsizei count)
 {
+    if (count <= 0)
+        return;
     GLsizei numVertices = first + count;
     SetupVertexAttribsWithVBOs(numVertices);
     glDrawArrays(mode, first, count);
@@ -1458,6 +1462,9 @@ void bridge_DrawArrays(GLenum mode, GLint first, GLsizei count)
 
 void bridge_DrawElements(GLenum mode, GLsizei count, GLenum type, const void *indices)
 {
+    if (!indices || count <= 0)
+        return;
+
     // Find max index to determine how many vertices we need to upload
     GLsizei maxIdx = FindMaxIndex(indices, count, type);
     GLsizei numVertices = maxIdx + 1;
