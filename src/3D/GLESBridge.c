@@ -149,6 +149,7 @@ static const char* sFragmentShaderSource =
     "    if (u_alphaTestEnabled) {\n"
     "        bool pass = false;\n"
     "        if (u_alphaFunc == 0x0205) { pass = (color.a != u_alphaRef); }\n"  // GL_NOTEQUAL
+    "        else if (u_alphaFunc == 0x0206) { pass = (color.a == u_alphaRef); }\n"  // GL_EQUAL
     "        else if (u_alphaFunc == 0x0201) { pass = (color.a < u_alphaRef); }\n"  // GL_LESS
     "        else if (u_alphaFunc == 0x0204) { pass = (color.a > u_alphaRef); }\n"  // GL_GREATER
     "        else if (u_alphaFunc == 0x0203) { pass = (color.a >= u_alphaRef); }\n" // GL_GEQUAL
