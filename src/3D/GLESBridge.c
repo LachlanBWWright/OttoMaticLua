@@ -1351,8 +1351,9 @@ static void SetupVertexAttribsWithVBOs(GLsizei numVertices)
     // Position
     if (sVertexArrayEnabled && sVertexArrayPtr && numVertices > 0) {
         GLsizei compSize = GetTypeSize(sVertexArrayType);
-        GLsizei stride = sVertexArrayStride ? sVertexArrayStride : (sVertexArraySize * compSize);
-        GLsizei dataSize = numVertices * stride;
+        GLsizei elemSize = sVertexArraySize * compSize;
+        GLsizei stride = sVertexArrayStride ? sVertexArrayStride : elemSize;
+        GLsizei dataSize = (numVertices - 1) * stride + elemSize;
         glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_pos);
         glBufferData(GL_ARRAY_BUFFER, dataSize, sVertexArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_POSITION);
@@ -1365,8 +1366,9 @@ static void SetupVertexAttribsWithVBOs(GLsizei numVertices)
     // Normal
     if (sNormalArrayEnabled && sNormalArrayPtr && numVertices > 0) {
         GLsizei compSize = GetTypeSize(sNormalArrayType);
-        GLsizei stride = sNormalArrayStride ? sNormalArrayStride : (3 * compSize);
-        GLsizei dataSize = numVertices * stride;
+        GLsizei elemSize = 3 * compSize;
+        GLsizei stride = sNormalArrayStride ? sNormalArrayStride : elemSize;
+        GLsizei dataSize = (numVertices - 1) * stride + elemSize;
         glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_norm);
         glBufferData(GL_ARRAY_BUFFER, dataSize, sNormalArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_NORMAL);
@@ -1380,8 +1382,9 @@ static void SetupVertexAttribsWithVBOs(GLsizei numVertices)
     // TexCoord
     if (sTexCoordArrayEnabled && sTexCoordArrayPtr && numVertices > 0) {
         GLsizei compSize = GetTypeSize(sTexCoordArrayType);
-        GLsizei stride = sTexCoordArrayStride ? sTexCoordArrayStride : (sTexCoordArraySize * compSize);
-        GLsizei dataSize = numVertices * stride;
+        GLsizei elemSize = sTexCoordArraySize * compSize;
+        GLsizei stride = sTexCoordArrayStride ? sTexCoordArrayStride : elemSize;
+        GLsizei dataSize = (numVertices - 1) * stride + elemSize;
         glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_tc0);
         glBufferData(GL_ARRAY_BUFFER, dataSize, sTexCoordArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_TEXCOORD);
@@ -1396,8 +1399,9 @@ static void SetupVertexAttribsWithVBOs(GLsizei numVertices)
     if (sColorArrayEnabled && sColorArrayPtr && numVertices > 0) {
         GLboolean normalize = (sColorArrayType == GL_UNSIGNED_BYTE) ? GL_TRUE : GL_FALSE;
         GLsizei compSize = GetTypeSize(sColorArrayType);
-        GLsizei stride = sColorArrayStride ? sColorArrayStride : (sColorArraySize * compSize);
-        GLsizei dataSize = numVertices * stride;
+        GLsizei elemSize = sColorArraySize * compSize;
+        GLsizei stride = sColorArrayStride ? sColorArrayStride : elemSize;
+        GLsizei dataSize = (numVertices - 1) * stride + elemSize;
         glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_color);
         glBufferData(GL_ARRAY_BUFFER, dataSize, sColorArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_COLOR);
@@ -1411,8 +1415,9 @@ static void SetupVertexAttribsWithVBOs(GLsizei numVertices)
     // TexCoord1 (multi-texture unit 1)
     if (sTexCoord1ArrayEnabled && sTexCoord1ArrayPtr && numVertices > 0) {
         GLsizei compSize = GetTypeSize(sTexCoord1ArrayType);
-        GLsizei stride = sTexCoord1ArrayStride ? sTexCoord1ArrayStride : (sTexCoord1ArraySize * compSize);
-        GLsizei dataSize = numVertices * stride;
+        GLsizei elemSize = sTexCoord1ArraySize * compSize;
+        GLsizei stride = sTexCoord1ArrayStride ? sTexCoord1ArrayStride : elemSize;
+        GLsizei dataSize = (numVertices - 1) * stride + elemSize;
         glBindBuffer(GL_ARRAY_BUFFER, sStreamVBO_tc1);
         glBufferData(GL_ARRAY_BUFFER, dataSize, sTexCoord1ArrayPtr, GL_STREAM_DRAW);
         glEnableVertexAttribArray(ATTR_TEXCOORD1);
