@@ -194,6 +194,12 @@
 #ifndef GL_SPHERE_MAP
 #define GL_SPHERE_MAP 0x2402
 #endif
+#ifndef GL_OBJECT_LINEAR
+#define GL_OBJECT_LINEAR 0x2401
+#endif
+#ifndef GL_OBJECT_PLANE
+#define GL_OBJECT_PLANE 0x2501
+#endif
 
 // Texture environment constants
 #ifndef GL_TEXTURE0_ARB

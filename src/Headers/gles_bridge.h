@@ -372,6 +372,7 @@ void bridge_NormalPointer(GLenum type, GLsizei stride, const void *ptr);
 void bridge_ColorPointer(GLint size, GLenum type, GLsizei stride, const void *ptr);
 void bridge_TexCoordPointer(GLint size, GLenum type, GLsizei stride, const void *ptr);
 void bridge_ClientActiveTexture(GLenum texture);
+void bridge_ActiveTexture(GLenum texture);
 
 // ============================================================================
 // Draw calls (intercept to set up shader state)

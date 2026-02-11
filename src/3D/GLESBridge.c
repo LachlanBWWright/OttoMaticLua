@@ -21,6 +21,7 @@ static const char* sVertexShaderSource =
     "in vec3 a_normal;\n"
     "in vec2 a_texcoord;\n"
     "in vec4 a_color;\n"
+    "in vec2 a_texcoord1;\n"
     "\n"
     "uniform mat4 u_projection;\n"
     "uniform mat4 u_modelview;\n"
@@ -45,14 +46,31 @@ static const char* sVertexShaderSource =
     "uniform float u_fogStart;\n"
     "uniform float u_fogEnd;\n"
     "\n"
+    "// Texture generation (sphere mapping)\n"
+    "uniform bool u_texGenSEnabled;\n"
+    "uniform bool u_texGenTEnabled;\n"
+    "uniform int u_texGenMode;\n"  // 0 = sphere map
+    "\n"
     "out vec4 v_color;\n"
     "out vec2 v_texcoord;\n"
+    "out vec2 v_texcoord1;\n"
     "out float v_fogFactor;\n"
     "\n"
     "void main() {\n"
     "    vec4 eyePos = u_modelview * a_position;\n"
     "    gl_Position = u_projection * eyePos;\n"
     "    v_texcoord = a_texcoord;\n"
+    "\n"
+    "    // Compute sphere map texcoords for texture unit 1 if texgen enabled\n"
+    "    if (u_texGenSEnabled || u_texGenTEnabled) {\n"
+    "        vec3 eyeNorm = normalize(u_normalMatrix * a_normal);\n"
+    "        vec3 eyeDir = normalize(eyePos.xyz);\n"
+    "        vec3 r = reflect(eyeDir, eyeNorm);\n"
+    "        float m = 2.0 * sqrt(r.x*r.x + r.y*r.y + (r.z+1.0)*(r.z+1.0));\n"
+    "        v_texcoord1 = vec2(r.x/m + 0.5, r.y/m + 0.5);\n"
+    "    } else {\n"
+    "        v_texcoord1 = a_texcoord1;\n"
+    "    }\n"
     "\n"
     "    if (u_lightingEnabled) {\n"
     "        vec3 normal = normalize(u_normalMatrix * a_normal);\n"
@@ -93,10 +111,14 @@ static const char* sFragmentShaderSource =
     "\n"
     "in vec4 v_color;\n"
     "in vec2 v_texcoord;\n"
+    "in vec2 v_texcoord1;\n"
     "in float v_fogFactor;\n"
     "\n"
     "uniform bool u_textureEnabled;\n"
     "uniform sampler2D u_texture0;\n"
+    "uniform bool u_texture1Enabled;\n"
+    "uniform sampler2D u_texture1;\n"
+    "uniform int u_texEnvMode1;\n"  // 0=modulate, 1=add, 2=replace
     "uniform bool u_fogEnabled;\n"
     "uniform vec4 u_fogColor;\n"
     "uniform bool u_alphaTestEnabled;\n"
@@ -111,6 +133,18 @@ static const char* sFragmentShaderSource =
     "        color = texture(u_texture0, v_texcoord) * v_color;\n"
     "    } else {\n"
     "        color = v_color;\n"
+    "    }\n"
+    "\n"
+    "    // Multi-texture: blend texture unit 1 on top\n"
+    "    if (u_texture1Enabled) {\n"
+    "        vec4 tex1 = texture(u_texture1, v_texcoord1);\n"
+    "        if (u_texEnvMode1 == 1) {\n"  // ADD
+    "            color.rgb = color.rgb + tex1.rgb;\n"
+    "        } else if (u_texEnvMode1 == 2) {\n"  // REPLACE
+    "            color.rgb = tex1.rgb;\n"
+    "        } else {\n"  // MODULATE (default)
+    "            color.rgb = color.rgb * tex1.rgb;\n"
+    "        }\n"
     "    }\n"
     "\n"
     "    if (u_alphaTestEnabled) {\n"
@@ -141,6 +175,7 @@ static const char* sFragmentShaderSource =
 #define ATTR_NORMAL    1
 #define ATTR_TEXCOORD  2
 #define ATTR_COLOR     3
+#define ATTR_TEXCOORD1 4
 
 // ============================================================================
 // Global state
@@ -176,6 +211,14 @@ static GLint sLoc_texture0 = -1;
 static GLint sLoc_alphaTestEnabled = -1;
 static GLint sLoc_alphaRef = -1;
 static GLint sLoc_alphaFunc = -1;
+
+// Multi-texture & texgen uniform locations
+static GLint sLoc_texture1Enabled = -1;
+static GLint sLoc_texture1 = -1;
+static GLint sLoc_texEnvMode1 = -1;
+static GLint sLoc_texGenSEnabled = -1;
+static GLint sLoc_texGenTEnabled = -1;
+static GLint sLoc_texGenMode = -1;
 
 // Matrix stacks
 static BridgeMatrixStack sModelviewStack;
@@ -235,6 +278,25 @@ static const void* sTexCoordArrayPtr = NULL;
 
 // Active client texture unit
 static GLenum sClientActiveTexture = GL_TEXTURE0;
+
+// Active server texture unit (for glEnable(GL_TEXTURE_2D) per unit)
+static GLenum sActiveTexture = GL_TEXTURE0;
+
+// Texture unit 1 state for multi-texturing
+static GLboolean sTexture1Enabled = GL_FALSE;
+static GLint sTexEnvMode1 = 0;  // 0=modulate, 1=add, 2=replace
+
+// Texture unit 1 coord arrays
+static GLboolean sTexCoord1ArrayEnabled = GL_FALSE;
+static GLint sTexCoord1ArraySize = 2;
+static GLenum sTexCoord1ArrayType = GL_FLOAT;
+static GLsizei sTexCoord1ArrayStride = 0;
+static const void* sTexCoord1ArrayPtr = NULL;
+
+// Texture generation state (sphere mapping)
+static GLboolean sTexGenSEnabled = GL_FALSE;
+static GLboolean sTexGenTEnabled = GL_FALSE;
+static GLint sTexGenMode = 0;  // 0 = sphere map
 
 // Immediate mode state
 static GLenum sImmMode = GL_TRIANGLES;
@@ -332,6 +394,7 @@ static GLuint CreateProgram(const char *vertSrc, const char *fragSrc)
     glBindAttribLocation(program, ATTR_NORMAL, "a_normal");
     glBindAttribLocation(program, ATTR_TEXCOORD, "a_texcoord");
     glBindAttribLocation(program, ATTR_COLOR, "a_color");
+    glBindAttribLocation(program, ATTR_TEXCOORD1, "a_texcoord1");
 
     glAttachShader(program, vert);
     glAttachShader(program, frag);
@@ -395,6 +458,14 @@ void GLESBridge_Init(void)
     sLoc_alphaRef = glGetUniformLocation(sShaderProgram, "u_alphaRef");
     sLoc_alphaFunc = glGetUniformLocation(sShaderProgram, "u_alphaFunc");
 
+    // Multi-texture & texgen uniforms
+    sLoc_texture1Enabled = glGetUniformLocation(sShaderProgram, "u_texture1Enabled");
+    sLoc_texture1 = glGetUniformLocation(sShaderProgram, "u_texture1");
+    sLoc_texEnvMode1 = glGetUniformLocation(sShaderProgram, "u_texEnvMode1");
+    sLoc_texGenSEnabled = glGetUniformLocation(sShaderProgram, "u_texGenSEnabled");
+    sLoc_texGenTEnabled = glGetUniformLocation(sShaderProgram, "u_texGenTEnabled");
+    sLoc_texGenMode = glGetUniformLocation(sShaderProgram, "u_texGenMode");
+
     // Initialize matrix stacks
     sModelviewStack.top = 0;
     sProjectionStack.top = 0;
@@ -424,6 +495,7 @@ void GLESBridge_Init(void)
     // Use our shader
     glUseProgram(sShaderProgram);
     glUniform1i(sLoc_texture0, 0);  // texture unit 0
+    glUniform1i(sLoc_texture1, 1);  // texture unit 1
 
     BRIDGE_LOGI("GLES 3.0 Bridge initialized successfully");
 }
@@ -616,6 +688,14 @@ void bridge_SyncShaderState(void)
     // Texture
     glUniform1i(sLoc_textureEnabled, sTexture2DEnabled);
     glUniform1i(sLoc_texture0, 0);
+
+    // Multi-texture & texgen
+    glUniform1i(sLoc_texture1Enabled, sTexture1Enabled);
+    glUniform1i(sLoc_texture1, 1);
+    glUniform1i(sLoc_texEnvMode1, sTexEnvMode1);
+    glUniform1i(sLoc_texGenSEnabled, sTexGenSEnabled);
+    glUniform1i(sLoc_texGenTEnabled, sTexGenTEnabled);
+    glUniform1i(sLoc_texGenMode, sTexGenMode);
 
     // Alpha test
     glUniform1i(sLoc_alphaTestEnabled, sAlphaTestEnabled);
@@ -862,13 +942,18 @@ void bridge_Enable(GLenum cap)
         case GL_LIGHT2:       sLights[2].enabled = GL_TRUE; break;
         case GL_LIGHT3:       sLights[3].enabled = GL_TRUE; break;
         case GL_FOG:          sFogEnabled = GL_TRUE; break;
-        case GL_TEXTURE_2D:   sTexture2DEnabled = GL_TRUE; break;
+        case GL_TEXTURE_2D:
+            if (sActiveTexture == GL_TEXTURE1)
+                sTexture1Enabled = GL_TRUE;
+            else
+                sTexture2DEnabled = GL_TRUE;
+            break;
         case GL_NORMALIZE:    sNormalizeEnabled = GL_TRUE; break;
         case GL_RESCALE_NORMAL: break; // no-op
         case GL_ALPHA_TEST:   sAlphaTestEnabled = GL_TRUE; break;
         case GL_COLOR_MATERIAL: break; // always on in our model
-        case GL_TEXTURE_GEN_S: break; // not easily emulated, ignore for now
-        case GL_TEXTURE_GEN_T: break;
+        case GL_TEXTURE_GEN_S: sTexGenSEnabled = GL_TRUE; break;
+        case GL_TEXTURE_GEN_T: sTexGenTEnabled = GL_TRUE; break;
         // Native GLES 3.0 caps
         case GL_DEPTH_TEST:
         case GL_CULL_FACE:
@@ -896,13 +981,18 @@ void bridge_Disable(GLenum cap)
         case GL_LIGHT2:       sLights[2].enabled = GL_FALSE; break;
         case GL_LIGHT3:       sLights[3].enabled = GL_FALSE; break;
         case GL_FOG:          sFogEnabled = GL_FALSE; break;
-        case GL_TEXTURE_2D:   sTexture2DEnabled = GL_FALSE; break;
+        case GL_TEXTURE_2D:
+            if (sActiveTexture == GL_TEXTURE1)
+                sTexture1Enabled = GL_FALSE;
+            else
+                sTexture2DEnabled = GL_FALSE;
+            break;
         case GL_NORMALIZE:    sNormalizeEnabled = GL_FALSE; break;
         case GL_RESCALE_NORMAL: break;
         case GL_ALPHA_TEST:   sAlphaTestEnabled = GL_FALSE; break;
         case GL_COLOR_MATERIAL: break;
-        case GL_TEXTURE_GEN_S: break;
-        case GL_TEXTURE_GEN_T: break;
+        case GL_TEXTURE_GEN_S: sTexGenSEnabled = GL_FALSE; break;
+        case GL_TEXTURE_GEN_T: sTexGenTEnabled = GL_FALSE; break;
         case GL_DEPTH_TEST:
         case GL_CULL_FACE:
         case GL_BLEND:
@@ -932,8 +1022,8 @@ GLboolean bridge_IsEnabled(GLenum cap)
         case GL_NORMALIZE:    return sNormalizeEnabled;
         case GL_ALPHA_TEST:   return sAlphaTestEnabled;
         case GL_COLOR_MATERIAL: return GL_TRUE;
-        case GL_TEXTURE_GEN_S: return GL_FALSE;
-        case GL_TEXTURE_GEN_T: return GL_FALSE;
+        case GL_TEXTURE_GEN_S: return sTexGenSEnabled;
+        case GL_TEXTURE_GEN_T: return sTexGenTEnabled;
         case GL_DEPTH_TEST:
         case GL_CULL_FACE:
         case GL_BLEND:
@@ -1046,8 +1136,23 @@ void bridge_Fogi(GLenum pname, GLint param)
 
 void bridge_TexEnvi(GLenum target, GLenum pname, GLint param)
 {
-    (void)target; (void)pname; (void)param;
-    // In our shader, textures are always modulated with vertex color (GL_MODULATE behavior)
+    (void)target;
+    // Track texture environment mode for multi-texture combining
+    if (pname == GL_TEXTURE_ENV_MODE) {
+        // Only track for texture unit 1 (the active multi-texture unit)
+        // The game sets glActiveTextureARB(GL_TEXTURE1) before calling this
+        if (param == GL_MODULATE) {
+            sTexEnvMode1 = 0;
+        } else if (param == GL_ADD || param == GL_COMBINE) {
+            sTexEnvMode1 = 1;  // ADD
+        } else if (param == GL_REPLACE) {
+            sTexEnvMode1 = 2;
+        }
+    } else if (pname == GL_COMBINE_RGB) {
+        if (param == GL_ADD) {
+            sTexEnvMode1 = 1;
+        }
+    }
 }
 
 // ============================================================================
@@ -1070,7 +1175,12 @@ void bridge_EnableClientState(GLenum cap)
         case GL_VERTEX_ARRAY:        sVertexArrayEnabled = GL_TRUE; break;
         case GL_NORMAL_ARRAY:        sNormalArrayEnabled = GL_TRUE; break;
         case GL_COLOR_ARRAY:         sColorArrayEnabled = GL_TRUE; break;
-        case GL_TEXTURE_COORD_ARRAY: sTexCoordArrayEnabled = GL_TRUE; break;
+        case GL_TEXTURE_COORD_ARRAY:
+            if (sClientActiveTexture == GL_TEXTURE1)
+                sTexCoord1ArrayEnabled = GL_TRUE;
+            else
+                sTexCoordArrayEnabled = GL_TRUE;
+            break;
         default: break;
     }
 }
@@ -1081,7 +1191,12 @@ void bridge_DisableClientState(GLenum cap)
         case GL_VERTEX_ARRAY:        sVertexArrayEnabled = GL_FALSE; break;
         case GL_NORMAL_ARRAY:        sNormalArrayEnabled = GL_FALSE; break;
         case GL_COLOR_ARRAY:         sColorArrayEnabled = GL_FALSE; break;
-        case GL_TEXTURE_COORD_ARRAY: sTexCoordArrayEnabled = GL_FALSE; break;
+        case GL_TEXTURE_COORD_ARRAY:
+            if (sClientActiveTexture == GL_TEXTURE1)
+                sTexCoord1ArrayEnabled = GL_FALSE;
+            else
+                sTexCoordArrayEnabled = GL_FALSE;
+            break;
         default: break;
     }
 }
@@ -1111,15 +1226,28 @@ void bridge_ColorPointer(GLint size, GLenum type, GLsizei stride, const void *pt
 
 void bridge_TexCoordPointer(GLint size, GLenum type, GLsizei stride, const void *ptr)
 {
-    sTexCoordArraySize = size;
-    sTexCoordArrayType = type;
-    sTexCoordArrayStride = stride;
-    sTexCoordArrayPtr = ptr;
+    if (sClientActiveTexture == GL_TEXTURE1) {
+        sTexCoord1ArraySize = size;
+        sTexCoord1ArrayType = type;
+        sTexCoord1ArrayStride = stride;
+        sTexCoord1ArrayPtr = ptr;
+    } else {
+        sTexCoordArraySize = size;
+        sTexCoordArrayType = type;
+        sTexCoordArrayStride = stride;
+        sTexCoordArrayPtr = ptr;
+    }
 }
 
 void bridge_ClientActiveTexture(GLenum texture)
 {
     sClientActiveTexture = texture;
+}
+
+void bridge_ActiveTexture(GLenum texture)
+{
+    sActiveTexture = texture;
+    glActiveTexture(texture);
 }
 
 // ============================================================================
@@ -1172,6 +1300,17 @@ static void SetupVertexAttribsForArrayDraw(void)
         glDisableVertexAttribArray(ATTR_COLOR);
         glVertexAttrib4fv(ATTR_COLOR, sCurrentColor);
     }
+
+    // TexCoord1 (multi-texture unit 1)
+    if (sTexCoord1ArrayEnabled && sTexCoord1ArrayPtr) {
+        glEnableVertexAttribArray(ATTR_TEXCOORD1);
+        glVertexAttribPointer(ATTR_TEXCOORD1, sTexCoord1ArraySize, sTexCoord1ArrayType,
+                              GL_FALSE, sTexCoord1ArrayStride, sTexCoord1ArrayPtr);
+    } else {
+        glDisableVertexAttribArray(ATTR_TEXCOORD1);
+        GLfloat defaultTC1[2] = {0, 0};
+        glVertexAttrib2fv(ATTR_TEXCOORD1, defaultTC1);
+    }
 }
 
 static void CleanupVertexAttribs(void)
@@ -1180,6 +1319,7 @@ static void CleanupVertexAttribs(void)
     glDisableVertexAttribArray(ATTR_NORMAL);
     glDisableVertexAttribArray(ATTR_TEXCOORD);
     glDisableVertexAttribArray(ATTR_COLOR);
+    glDisableVertexAttribArray(ATTR_TEXCOORD1);
     glBindVertexArray(0);
 }
 
@@ -1289,8 +1429,12 @@ void bridge_PolygonMode(GLenum face, GLenum mode)
 
 void bridge_TexGeni(GLenum coord, GLenum pname, GLint param)
 {
-    (void)coord; (void)pname; (void)param;
-    // Texture generation not easily emulated, silently ignored
+    (void)coord;
+    if (pname == GL_TEXTURE_GEN_MODE) {
+        if (param == GL_SPHERE_MAP) {
+            sTexGenMode = 0;  // sphere map
+        }
+    }
 }
 
 void bridge_TexGenf(GLenum coord, GLenum pname, GLfloat param)
