@@ -1,6 +1,8 @@
 # Otto Matic Android APK
 
-This directory contains the Android APK split into multiple parts to fit within GitHub's file size limits (100MB).
+This directory contains the Android APK split into two parts to fit within GitHub's file size limits (100MB).
+
+The APK was built with GLES 3.0 shader-based rendering, including multi-texture blending and sphere map reflections.
 
 ## Reassembling the APK
 
@@ -19,7 +21,7 @@ Get-Content OttoMatic-debug.apk.part* -Encoding Byte -ReadCount 0 | Set-Content 
 ### On Windows (Command Prompt)
 ```cmd
 cd releases
-copy /b OttoMatic-debug.apk.partaa+OttoMatic-debug.apk.partab+OttoMatic-debug.apk.partac+OttoMatic-debug.apk.partad OttoMatic-debug.apk
+copy /b OttoMatic-debug.apk.part00+OttoMatic-debug.apk.part01 OttoMatic-debug.apk
 ```
 
 ## Installing on Android
@@ -38,6 +40,14 @@ adb install OttoMatic-debug.apk
 2. Transfer `OttoMatic-debug.apk` to your Android device
 3. Enable "Install from unknown sources" in your device settings
 4. Open the APK file on your device to install
+
+## CI/CD Builds
+
+The GitHub Actions CI workflow automatically builds and uploads APK artifacts on every push.
+To download the latest APK:
+1. Go to the **Actions** tab
+2. Click on the latest **Android Build** workflow run
+3. Download the **otto-matic-debug-apk** artifact
 
 ## Building from Source
 
@@ -65,12 +75,13 @@ The APK will be at: `android/app/build/outputs/apk/debug/app-debug.apk`
 - **Min SDK**: 24 (Android 7.0)
 - **Target SDK**: 34
 - **Architectures**: armeabi-v7a, arm64-v8a, x86, x86_64
-- **Size**: ~150MB (includes game assets)
+- **OpenGL**: GLES 3.0 with shader-based fixed-function emulation
+- **Size**: ~151MB (includes game assets for all architectures)
 
-## Checksum
+## Verify Checksums
 
 After reassembling, verify the APK integrity:
 ```bash
-sha256sum OttoMatic-debug.apk
-# Expected: 01d73ad4702e88cc9350849d16954eaea8a82c1f192b1ba160a8350c4a223b5d
+cd releases
+sha256sum -c checksums.sha256
 ```
