@@ -55,6 +55,10 @@
 #define PAUSE_BUTTON_X          0.50f
 #define PAUSE_BUTTON_Y          0.05f
 
+// Debug toggle button in top-right corner
+#define DEBUG_BUTTON_X          0.95f
+#define DEBUG_BUTTON_Y          0.05f
+
 // Maximum circle segments for drawing
 #define MAX_CIRCLE_SEGMENTS     32
 
@@ -158,6 +162,7 @@ void TouchControls_Init(void)
     InitTouchButton(TOUCH_BUTTON_PREV_WEAPON, PREV_WEAPON_X,   PREV_WEAPON_Y,   BUTTON_SIZE * 0.7f, true);
     InitTouchButton(TOUCH_BUTTON_NEXT_WEAPON, NEXT_WEAPON_X,   NEXT_WEAPON_Y,   BUTTON_SIZE * 0.7f, true);
     InitTouchButton(TOUCH_BUTTON_PAUSE,       PAUSE_BUTTON_X,  PAUSE_BUTTON_Y,  BUTTON_SIZE * 0.6f, true);
+    InitTouchButton(TOUCH_BUTTON_DEBUG_TOGGLE, DEBUG_BUTTON_X, DEBUG_BUTTON_Y,  BUTTON_SIZE * 0.5f, true);
 
     gTouchControlsInitialized = true;
     
@@ -330,6 +335,15 @@ void TouchControls_Update(void)
         }
         SDL_free(touchDevices);
     }
+
+    // Handle debug toggle button (cycle through debug modes: 0=off, 1=fps, 2=all)
+    if (gTouchControls.isPressed[TOUCH_BUTTON_DEBUG_TOGGLE] &&
+        !gTouchControls.wasPressed[TOUCH_BUTTON_DEBUG_TOGGLE])
+    {
+        extern Byte gDebugMode;
+        if (++gDebugMode > 2)
+            gDebugMode = 0;
+    }
 }
 
 //=============================================================================
@@ -434,10 +448,11 @@ void TouchControls_Draw(void)
     glPushMatrix();
     glLoadIdentity();
     
-    // Disable depth testing and enable blending
+    // Disable depth testing, culling, and enable blending
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
+    glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
@@ -468,9 +483,14 @@ void TouchControls_Draw(void)
     DrawButton(&gTouchButtons[TOUCH_BUTTON_PAUSE],
                gTouchControls.isPressed[TOUCH_BUTTON_PAUSE], alpha);
     
+    // Debug toggle button (small, in top-right corner)
+    DrawButton(&gTouchButtons[TOUCH_BUTTON_DEBUG_TOGGLE],
+               gTouchControls.isPressed[TOUCH_BUTTON_DEBUG_TOGGLE], alpha * 0.5f);
+    
     // Restore GL state
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
     
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
@@ -551,6 +571,7 @@ static void DrawButton(const TouchButton* button, bool pressed, float alpha)
         case TOUCH_BUTTON_PREV_WEAPON:
         case TOUCH_BUTTON_NEXT_WEAPON:  baseR = 0.8f; baseG = 0.7f; baseB = 0.2f; break;  // Yellow
         case TOUCH_BUTTON_PAUSE:        baseR = 0.5f; baseG = 0.5f; baseB = 0.5f; break;  // Gray
+        case TOUCH_BUTTON_DEBUG_TOGGLE: baseR = 0.3f; baseG = 0.3f; baseB = 0.6f; break;  // Dark blue
     }
     
     if (pressed)
@@ -623,6 +644,15 @@ static void DrawButton(const TouchButton* button, bool pressed, float alpha)
                      cx + iconSize * 0.5f, cy - iconSize * 0.6f,
                      cx + iconSize * 0.5f, cy + iconSize * 0.6f,
                      cx + iconSize * 0.1f, cy + iconSize * 0.6f);
+            break;
+
+        case TOUCH_BUTTON_DEBUG_TOGGLE:
+            // Draw "i" info icon - a dot and a vertical bar
+            DrawFilledCircle(cx, cy - iconSize * 0.55f, iconSize * 0.15f, 8);
+            DrawQuad(cx - iconSize * 0.15f, cy - iconSize * 0.25f,
+                     cx + iconSize * 0.15f, cy - iconSize * 0.25f,
+                     cx + iconSize * 0.15f, cy + iconSize * 0.6f,
+                     cx - iconSize * 0.15f, cy + iconSize * 0.6f);
             break;
     }
 }

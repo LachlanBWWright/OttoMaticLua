@@ -35,6 +35,9 @@ typedef double GLdouble;
 #ifndef GL_PROJECTION
 #define GL_PROJECTION 0x1701
 #endif
+#ifndef GL_TEXTURE
+#define GL_TEXTURE 0x1702
+#endif
 #ifndef GL_MODELVIEW_MATRIX
 #define GL_MODELVIEW_MATRIX 0x0BA6
 #endif

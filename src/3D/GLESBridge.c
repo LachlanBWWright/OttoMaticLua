@@ -50,6 +50,9 @@ static const char* sVertexShaderSource =
     "uniform bool u_texGenSEnabled;\n"
     "uniform bool u_texGenTEnabled;\n"
     "\n"
+    "// Texture matrix for UV transform (e.g. planet rotation)\n"
+    "uniform mat4 u_textureMatrix;\n"
+    "\n"
     "out vec4 v_color;\n"
     "out vec2 v_texcoord;\n"
     "out vec2 v_texcoord1;\n"
@@ -58,7 +61,7 @@ static const char* sVertexShaderSource =
     "void main() {\n"
     "    vec4 eyePos = u_modelview * a_position;\n"
     "    gl_Position = u_projection * eyePos;\n"
-    "    v_texcoord = a_texcoord;\n"
+    "    v_texcoord = (u_textureMatrix * vec4(a_texcoord, 0.0, 1.0)).xy;\n"
     "\n"
     "    // Compute sphere map texcoords for texture unit 1 if texgen enabled\n"
     "    if (u_texGenSEnabled || u_texGenTEnabled) {\n"
@@ -229,10 +232,12 @@ static GLint sLoc_texture1 = -1;
 static GLint sLoc_texEnvMode1 = -1;
 static GLint sLoc_texGenSEnabled = -1;
 static GLint sLoc_texGenTEnabled = -1;
+static GLint sLoc_textureMatrix = -1;
 
 // Matrix stacks
 static BridgeMatrixStack sModelviewStack;
 static BridgeMatrixStack sProjectionStack;
+static BridgeMatrixStack sTextureStack;
 static GLenum sCurrentMatrixMode = GL_MODELVIEW;
 
 // Current state
@@ -473,12 +478,15 @@ void GLESBridge_Init(void)
     sLoc_texEnvMode1 = glGetUniformLocation(sShaderProgram, "u_texEnvMode1");
     sLoc_texGenSEnabled = glGetUniformLocation(sShaderProgram, "u_texGenSEnabled");
     sLoc_texGenTEnabled = glGetUniformLocation(sShaderProgram, "u_texGenTEnabled");
+    sLoc_textureMatrix = glGetUniformLocation(sShaderProgram, "u_textureMatrix");
 
     // Initialize matrix stacks
     sModelviewStack.top = 0;
     sProjectionStack.top = 0;
+    sTextureStack.top = 0;
     Mat4Identity(sModelviewStack.stack[0]);
     Mat4Identity(sProjectionStack.stack[0]);
+    Mat4Identity(sTextureStack.stack[0]);
 
     // Initialize lights
     for (int i = 0; i < BRIDGE_MAX_LIGHTS; i++) {
@@ -552,6 +560,8 @@ static GLfloat* GetCurrentMatrix(void)
 {
     if (sCurrentMatrixMode == GL_PROJECTION)
         return sProjectionStack.stack[sProjectionStack.top];
+    else if (sCurrentMatrixMode == GL_TEXTURE)
+        return sTextureStack.stack[sTextureStack.top];
     else
         return sModelviewStack.stack[sModelviewStack.top];
 }
@@ -560,6 +570,8 @@ static BridgeMatrixStack* GetCurrentStack(void)
 {
     if (sCurrentMatrixMode == GL_PROJECTION)
         return &sProjectionStack;
+    else if (sCurrentMatrixMode == GL_TEXTURE)
+        return &sTextureStack;
     else
         return &sModelviewStack;
 }
@@ -723,6 +735,9 @@ void bridge_SyncShaderState(void)
     glUniform1i(sLoc_texEnvMode1, sTexEnvMode1);
     glUniform1i(sLoc_texGenSEnabled, sTexGenSEnabled);
     glUniform1i(sLoc_texGenTEnabled, sTexGenTEnabled);
+
+    // Texture matrix
+    glUniformMatrix4fv(sLoc_textureMatrix, 1, GL_FALSE, sTextureStack.stack[sTextureStack.top]);
 
     // Alpha test
     glUniform1i(sLoc_alphaTestEnabled, sAlphaTestEnabled);

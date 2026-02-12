@@ -752,6 +752,15 @@ do_anaglyph:
 			/* END RENDER */
 			/**************/
 
+#ifdef __ANDROID__
+		/* DRAW TOUCH CONTROLS OVERLAY ON ALL SCREENS */
+
+	if (TouchControls_IsVisible())
+	{
+		TouchControls_Draw();
+	}
+#endif
+
            /* SWAP THE BUFFS */
 
 	SDL_GL_SwapWindow(gSDLWindow);					// end render loop
