@@ -340,7 +340,6 @@ void TouchControls_Update(void)
     if (gTouchControls.isPressed[TOUCH_BUTTON_DEBUG_TOGGLE] &&
         !gTouchControls.wasPressed[TOUCH_BUTTON_DEBUG_TOGGLE])
     {
-        extern Byte gDebugMode;
         if (++gDebugMode > 2)
             gDebugMode = 0;
     }
