@@ -50,6 +50,9 @@ typedef struct
     float       buttonScale;
 } TouchControlState;
 
+// Save button states before events are processed (call at start of each input frame)
+void TouchControls_BeginFrame(void);
+
 // Initialize touch controls system
 void TouchControls_Init(void);
 

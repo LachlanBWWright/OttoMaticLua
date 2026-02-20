@@ -250,21 +250,41 @@ static void ProcessJoystickTouch(float touchX, float touchY)
     gTouchControls.isPressed[TOUCH_BUTTON_DPAD_RIGHT] = (gTouchControls.analogX > threshold);
 }
 
-void TouchControls_Update(void)
+void TouchControls_BeginFrame(void)
 {
     if (!gTouchControlsInitialized || !gTouchControls.visible)
         return;
-    
-    // Update screen dimensions
-    gTouchScreenWidth = gGameWindowWidth;
-    gTouchScreenHeight = gGameWindowHeight;
-    
-    // Store previous state for edge detection
+
+    // Update screen dimensions before events are processed so HandleEvent
+    // uses the current aspect ratio for hit testing.  Query the window
+    // directly so that the values are always fresh, even before the first
+    // OGL_DrawScene call sets gGameWindowWidth/gGameWindowHeight.
+    if (gSDLWindow)
+    {
+        SDL_GetWindowSizeInPixels(gSDLWindow, &gTouchScreenWidth, &gTouchScreenHeight);
+    }
+    else if (gGameWindowWidth > 0 && gGameWindowHeight > 0)
+    {
+        gTouchScreenWidth = gGameWindowWidth;
+        gTouchScreenHeight = gGameWindowHeight;
+    }
+
+    // Store previous state for edge detection (must happen before events are processed)
     for (int i = 0; i < NUM_TOUCH_BUTTONS; i++)
     {
         gTouchControls.wasPressed[i] = gTouchControls.isPressed[i];
     }
-    
+}
+
+void TouchControls_Update(void)
+{
+    if (!gTouchControlsInitialized || !gTouchControls.visible)
+        return;
+
+    // Sync screen dimensions for the upcoming Draw call
+    gTouchScreenWidth = gGameWindowWidth;
+    gTouchScreenHeight = gGameWindowHeight;
+
     // Clear action button states (joystick is handled separately)
     for (int i = TOUCH_BUTTON_JUMP; i < NUM_TOUCH_BUTTONS; i++)
     {
@@ -315,12 +335,17 @@ void TouchControls_Update(void)
                     }
                     else
                     {
-                        // Check action buttons
-                        int buttonHit = HitTestButtons(touchX, touchY);
-                        if (buttonHit != TOUCH_BUTTON_NONE)
+                        // Only check action buttons for non-joystick fingers;
+                        // the joystick finger must never activate buttons even if
+                        // it drifts outside the joystick hit area.
+                        if (finger->id != gJoystickFinger)
                         {
-                            gTouchControls.isPressed[buttonHit] = true;
-                            gButtonFingers[buttonHit] = finger->id;
+                            int buttonHit = HitTestButtons(touchX, touchY);
+                            if (buttonHit != TOUCH_BUTTON_NONE)
+                            {
+                                gTouchControls.isPressed[buttonHit] = true;
+                                gButtonFingers[buttonHit] = finger->id;
+                            }
                         }
                     }
                 }
@@ -477,10 +502,14 @@ void TouchControls_Draw(void)
     DrawActionButton(&gTouchButtons[TOUCH_BUTTON_DEBUG_TOGGLE],
                      gTouchControls.isPressed[TOUCH_BUTTON_DEBUG_TOGGLE]);
     
-    // Restore GL state
+    // Restore GL state fully so the next frame's 3D rendering is not affected
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glEnable(GL_TEXTURE_2D);
+    OGL_EnableLighting();
+    glLineWidth(1.0f);
+    SetColor4f(1, 1, 1, 1);
     
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
