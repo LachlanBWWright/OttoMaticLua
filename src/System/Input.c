@@ -311,11 +311,8 @@ void UpdateInput(void)
 				case kNeed_PunchPickup:
 					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PUNCH_PICKUP);
 					break;
-				case kNeed_PrevWeapon:
-					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PREV_WEAPON);
-					break;
 				case kNeed_NextWeapon:
-					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_NEXT_WEAPON);
+					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_SWITCH_WEAPON);
 					break;
 				case kNeed_UIPause:
 					downNow |= TouchControls_IsPressed(TOUCH_BUTTON_PAUSE);

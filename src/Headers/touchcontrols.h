@@ -16,18 +16,17 @@ enum
 {
     TOUCH_BUTTON_NONE = -1,
     
-    // D-pad directions
+    // Virtual joystick directions (internal use for discrete mapping)
     TOUCH_BUTTON_DPAD_UP,
     TOUCH_BUTTON_DPAD_DOWN,
     TOUCH_BUTTON_DPAD_LEFT,
     TOUCH_BUTTON_DPAD_RIGHT,
     
-    // Action buttons
-    TOUCH_BUTTON_JUMP,
-    TOUCH_BUTTON_SHOOT,
-    TOUCH_BUTTON_PUNCH_PICKUP,
-    TOUCH_BUTTON_PREV_WEAPON,
-    TOUCH_BUTTON_NEXT_WEAPON,
+    // Action buttons (diamond layout on right side)
+    TOUCH_BUTTON_JUMP,              // Bottom of diamond
+    TOUCH_BUTTON_SHOOT,             // Right of diamond
+    TOUCH_BUTTON_PUNCH_PICKUP,      // Left of diamond (interact)
+    TOUCH_BUTTON_SWITCH_WEAPON,     // Top of diamond
     TOUCH_BUTTON_PAUSE,
     TOUCH_BUTTON_DEBUG_TOGGLE,
     
