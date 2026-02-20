@@ -475,6 +475,14 @@ void TouchControls_Draw(void)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glLineWidth(2.0f);
     
+    // The 3D renderer may have left colour/normal/texcoord client arrays enabled.
+    // Disable them so every primitive below uses the solid colour set via glColor4f
+    // (or the GLES bridge equivalent) instead of stale per-vertex data from the
+    // last 3D draw call, which would produce unwanted gradients on the HUD circles.
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    
     // Draw virtual joystick
     float joyX = JOYSTICK_CENTER_X * gTouchScreenWidth;
     float joyY = JOYSTICK_CENTER_Y * gTouchScreenHeight;
