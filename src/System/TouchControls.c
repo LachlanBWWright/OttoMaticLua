@@ -22,7 +22,7 @@
 #define INVALID_FINGER_ID       ((SDL_FingerID)-1)
 
 // Joystick size and position (relative to screen height)
-#define JOYSTICK_RADIUS         0.15f       // Joystick radius as fraction of screen height (20% bigger than old 0.125)
+#define JOYSTICK_RADIUS         0.15f       // Joystick radius as fraction of screen height (20% larger than old 0.125)
 #define JOYSTICK_CENTER_X       0.15f
 #define JOYSTICK_CENTER_Y       0.70f
 
@@ -48,7 +48,11 @@
 #define BG_ALPHA                0.15f       // Very transparent background
 #define OUTLINE_ALPHA           0.4f        // Subtle outline
 #define ICON_ALPHA              0.45f       // Subtle icon
-#define PRESSED_ALPHA           0.6f        // Slightly more visible when pressed
+#define PRESSED_ALPHA           0.6f        // More visible when pressed
+
+// Hit area multipliers (touch targets larger than visual size)
+#define BUTTON_HIT_MULTIPLIER   1.3f        // 30% larger than visual
+#define JOYSTICK_HIT_MULTIPLIER 1.5f        // 50% larger than visual
 
 // Maximum circle segments for drawing
 #define MAX_CIRCLE_SEGMENTS     32
@@ -190,7 +194,7 @@ static int HitTestButtons(float touchX, float touchY)
         float dist = sqrtf(dx*dx + dy*dy);
         float scaledRadius = btn->radius * gTouchControls.buttonScale;
         
-        if (dist <= scaledRadius * 1.3f)  // slightly larger hit area than visual
+        if (dist <= scaledRadius * BUTTON_HIT_MULTIPLIER)
         {
             return i;
         }
@@ -207,7 +211,7 @@ static bool IsInJoystickArea(float touchX, float touchY)
     float dist = sqrtf(dx*dx + dy*dy);
     float scaledRadius = JOYSTICK_RADIUS * gTouchControls.buttonScale;
     
-    return dist <= scaledRadius * 1.5f;  // generous touch area
+    return dist <= scaledRadius * JOYSTICK_HIT_MULTIPLIER;
 }
 
 static void ProcessJoystickTouch(float touchX, float touchY)
