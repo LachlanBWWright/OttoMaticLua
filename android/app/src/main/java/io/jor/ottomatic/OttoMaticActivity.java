@@ -3,13 +3,9 @@ package io.jor.ottomatic;
 import org.libsdl.app.SDLActivity;
 
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Bundle;
 import android.text.InputType;
-import android.view.LayoutInflater;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -170,7 +166,6 @@ public class OttoMaticActivity extends SDLActivity {
             layout.setOrientation(LinearLayout.VERTICAL);
             int pad = (int)(16 * getResources().getDisplayMetrics().density);
             layout.setPadding(pad, pad, pad, pad);
-            layout.setSpacing(pad / 2);
 
             TextView tvLevel = new TextView(OttoMaticActivity.this);
             tvLevel.setText("Level number (1-10):");
@@ -229,51 +224,58 @@ public class OttoMaticActivity extends SDLActivity {
             ScrollView scroll = new ScrollView(OttoMaticActivity.this);
             scroll.addView(layout);
 
-            new AlertDialog.Builder(OttoMaticActivity.this)
+            // Build the dialog without auto-dismiss on Load so we can validate first
+            AlertDialog dialog = new AlertDialog.Builder(OttoMaticActivity.this)
                 .setTitle("Custom Level")
                 .setView(scroll)
-                .setPositiveButton("Load", (dialog, which) -> {
-                    String levelStr = etLevel.getText().toString().trim();
-                    int levelNum = -1;
-                    try {
-                        levelNum = Integer.parseInt(levelStr) - 1; // convert 1-based to 0-based
-                    } catch (NumberFormatException ignored) {}
-
-                    if (levelNum < 0 || levelNum >= 10) {
-                        tvLevel.setText("Level number (1-10): INVALID - enter 1 to 10");
-                        return;
-                    }
-                    if (mCustomTerUri == null || mCustomTerRsrcUri == null) {
-                        tvTer.setText("Please select both .ter and .ter.rsrc files!");
-                        return;
-                    }
-
-                    // Copy files to internal storage over the target level's terrain files
-                    String internalPath = getFilesDir().getAbsolutePath();
-                    String basename = TERRAIN_BASENAMES[levelNum];
-                    String terDest = internalPath + "/Terrain/" + basename + ".ter";
-                    String rsrcDest = internalPath + "/Terrain/" + basename + ".ter.rsrc";
-
-                    boolean ok1 = copyUriToFile(mCustomTerUri, terDest);
-                    boolean ok2 = copyUriToFile(mCustomTerRsrcUri, rsrcDest);
-
-                    if (!ok1 || !ok2) {
-                        tvTer.setText("Error copying files! Check storage permissions.");
-                        return;
-                    }
-
-                    result[0] = levelNum;
-                    latch.countDown();
-                })
-                .setNegativeButton("Cancel", (dialog, which) -> {
+                .setPositiveButton("Load", null)   // listener set after show() to prevent auto-dismiss
+                .setNegativeButton("Cancel", (d, which) -> {
                     result[0] = -1;
                     latch.countDown();
                 })
-                .setOnCancelListener(dialog -> {
+                .setOnCancelListener(d -> {
                     result[0] = -1;
                     latch.countDown();
                 })
-                .show();
+                .create();
+
+            dialog.show();
+
+            // Override the "Load" button click so we can keep the dialog open on validation errors
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String levelStr = etLevel.getText().toString().trim();
+                int levelNum = -1;
+                try {
+                    levelNum = Integer.parseInt(levelStr) - 1; // convert 1-based to 0-based
+                } catch (NumberFormatException ignored) {}
+
+                if (levelNum < 0 || levelNum >= 10) {
+                    tvLevel.setText("Level number (1-10): INVALID — enter 1 to 10");
+                    return;  // keep dialog open
+                }
+                if (mCustomTerUri == null || mCustomTerRsrcUri == null) {
+                    tvTer.setText("Please select both .ter and .ter.rsrc files!");
+                    return;  // keep dialog open
+                }
+
+                // Copy files to internal storage over the target level's terrain files
+                String internalPath = getFilesDir().getAbsolutePath();
+                String basename = TERRAIN_BASENAMES[levelNum];
+                String terDest = internalPath + "/Terrain/" + basename + ".ter";
+                String rsrcDest = internalPath + "/Terrain/" + basename + ".ter.rsrc";
+
+                boolean ok1 = copyUriToFile(mCustomTerUri, terDest);
+                boolean ok2 = copyUriToFile(mCustomTerRsrcUri, rsrcDest);
+
+                if (!ok1 || !ok2) {
+                    tvTer.setText("Error copying files! Check storage permissions.");
+                    return;  // keep dialog open
+                }
+
+                result[0] = levelNum;
+                dialog.dismiss();
+                latch.countDown();
+            });
         });
 
         try {
