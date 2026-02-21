@@ -118,7 +118,7 @@ ObjNode	*newObj;
 	gNewObjectDefinition.coord.x 	= x;
 	gNewObjectDefinition.coord.z 	= z;
 	gNewObjectDefinition.coord.y 	= GetTerrainY(x,z);
-	gNewObjectDefinition.flags 		= gAutoFadeStatusBits|STATUS_BIT_HIDDEN;		// start hidden!
+	gNewObjectDefinition.flags 		= gAutoFadeStatusBits|STATUS_BIT_HIDDEN|STATUS_BIT_NOZWRITES;		// start hidden!
 	gNewObjectDefinition.slot 		= SLOT_OF_DUMB-1;
 	gNewObjectDefinition.moveCall 	= MoveFallingCrystal_Underground;
 	gNewObjectDefinition.rot 	= (float)itemPtr->parm[0] * (PI2/8.0f);			// use given rot
