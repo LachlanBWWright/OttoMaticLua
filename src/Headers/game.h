@@ -23,8 +23,14 @@ extern "C"
 		/* HEADERS */
 
 #include <SDL3/SDL.h>
+
+#ifdef __ANDROID__
+// Android uses OpenGL ES 1.1 - include compatibility header
+#include "gles_compat.h"
+#else
 #include <SDL3/SDL_opengl.h>
 #include <SDL3/SDL_opengl_glext.h>
+#endif
 
 #include "Pomme.h"
 
@@ -75,6 +81,7 @@ extern "C"
 #include "textmesh.h"
 #include "tga.h"
 #include "menu.h"
+#include "touchcontrols.h"
 
 		/* EXTERNS */
 

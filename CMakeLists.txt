@@ -26,6 +26,8 @@ option(SANITIZE "Build with asan/ubsan" OFF)
 
 if(WIN32 OR APPLE)
 	# Don't warn
+elseif(ANDROID)
+	message("Building for Android")
 elseif(SANITIZE)
 	message("Sanitizers enabled")
 else()
@@ -36,7 +38,13 @@ endif()
 # GLOBAL OPTIONS (BEFORE ADDING SUBDIRECTORIES)
 #------------------------------------------------------------------------------
 
-if(MSVC)
+if(ANDROID)
+	# Android-specific build options
+	set(BUILD_SDL_FROM_SOURCE ON CACHE BOOL "Build SDL from source for Android" FORCE)
+	set(SDL_STATIC OFF CACHE BOOL "Use shared SDL on Android" FORCE)
+	add_compile_definitions(__ANDROID__)
+	# Note: GL_ES defines are added only to game target, not globally
+elseif(MSVC)
 	# This lets us detect that MSVC supports C++20 features via the __cplusplus macro
 	# (See: https://docs.microsoft.com/en-us/cpp/build/reference/zc-cplusplus)
 	add_compile_options(/Zc:__cplusplus)
@@ -87,15 +95,42 @@ else()
 	endif()
 	message("Building SDL3 from source: " ${SDL3_DIR})
 	add_subdirectory("${SDL3_DIR}" EXCLUDE_FROM_ALL)
+	# Make SDL3 findable by subprojects without find_package
+	# SDL3::SDL3 alias is already created by SDL's CMakeLists.txt
+	set(SDL3_FOUND TRUE)
+	set(SDL3_INCLUDE_DIRS "${SDL3_DIR}/include")
+	set(SDL3_LIBRARIES SDL3::SDL3)
 endif()
 
 #------------------------------------------------------------------------------
 # DEPENDENCIES
 #------------------------------------------------------------------------------
 
+# For Pomme: Skip its find_package(SDL3) by providing the target info
+if(BUILD_SDL_FROM_SOURCE)
+	# Create a minimal FindSDL3.cmake that returns our already-built target
+	file(WRITE "${CMAKE_BINARY_DIR}/FindSDL3.cmake" 
+"# Auto-generated FindSDL3.cmake for source build
+set(SDL3_FOUND TRUE)
+if(NOT TARGET SDL3::SDL3)
+  message(FATAL_ERROR \"SDL3::SDL3 target not found - build SDL3 first\")
+endif()
+")
+	list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_BINARY_DIR}")
+endif()
+
 add_subdirectory(extern/Pomme)
 
-find_package(OpenGL REQUIRED)
+if(ANDROID)
+	# Android uses OpenGL ES 3.0 with shader-based fixed-function emulation
+	# ES 3.0 provides programmable pipeline, VAOs, and GL_UNSIGNED_INT indices
+	find_library(GLES3_LIBRARY GLESv3)  # OpenGL ES 3.0 programmable pipeline
+	find_library(EGL_LIBRARY EGL)
+	find_library(ANDROID_LOG_LIBRARY log)
+	find_library(ANDROID_LIBRARY android)
+else()
+	find_package(OpenGL REQUIRED)
+endif()
 
 #------------------------------------------------------------------------------
 # EXECUTABLE TARGET
@@ -119,7 +154,12 @@ elseif(APPLE)
 	set_source_files_properties(${CMAKE_SOURCE_DIR}/packaging/${GAME_TARGET}.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 endif()
 
-add_executable(${GAME_TARGET} ${GAME_SOURCES})
+# On Android, build a shared library for SDL to load
+if(ANDROID)
+	add_library(${GAME_TARGET} SHARED ${GAME_SOURCES})
+else()
+	add_executable(${GAME_TARGET} ${GAME_SOURCES})
+endif()
 
 target_include_directories(${GAME_TARGET} PRIVATE ${GAME_SRCDIR}/Headers)
 
@@ -197,7 +237,7 @@ if(SANITIZE)
 	target_link_libraries(${GAME_TARGET} PRIVATE asan ubsan)
 endif()
 
-# Explicitly link math lib on Linux
+# Explicitly link math lib on Linux/Android
 if(NOT APPLE AND NOT WIN32)
 	target_link_libraries(${GAME_TARGET} PRIVATE m)
 endif()
@@ -210,7 +250,18 @@ else()
 endif()
 
 # Link core dependencies
-target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+if(ANDROID)
+	# Android uses OpenGL ES 3.0 with shader-based fixed-function emulation
+	target_link_libraries(${GAME_TARGET} PRIVATE 
+		Pomme 
+		${GLES3_LIBRARY}
+		${EGL_LIBRARY}
+		${ANDROID_LOG_LIBRARY}
+		${ANDROID_LIBRARY}
+	)
+else()
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+endif()
 
 # Add required frameworks for KillMacMouseAcceleration
 if(APPLE)

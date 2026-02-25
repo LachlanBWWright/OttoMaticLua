@@ -27,6 +27,12 @@ static void ColorBalanceRGBForAnaglyph(uint32_t *rr, uint32_t *gg, uint32_t *bb)
 static void	ConvertTextureToGrey(void *imageMemory, short width, short height, GLint srcFormat, GLint dataType);
 static void	ConvertTextureToColorAnaglyph(void *imageMemory, short width, short height, GLint srcFormat, GLint dataType);
 
+#ifdef __ANDROID__
+// Convert texture data from unsupported formats to OpenGL ES compatible RGBA/UNSIGNED_BYTE
+static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
+                                   GLint *srcFormat, GLint *destFormat, GLint *dataType);
+#endif
+
 
 /****************************/
 /*    CONSTANTS             */
@@ -298,6 +304,10 @@ static void OGL_DisposeDrawContext(void)
 	{
 		return;
 	}
+
+#ifdef __ANDROID__
+	GLESBridge_Shutdown();
+#endif
 
 	SDL_GL_MakeCurrent(gSDLWindow, NULL);		// make context not current
 	SDL_GL_DestroyContext(gAGLContext);			// nuke context
@@ -742,6 +752,15 @@ do_anaglyph:
 			/* END RENDER */
 			/**************/
 
+#ifdef __ANDROID__
+		/* DRAW TOUCH CONTROLS OVERLAY ON ALL SCREENS */
+
+	if (TouchControls_IsVisible())
+	{
+		TouchControls_Draw();
+	}
+#endif
+
            /* SWAP THE BUFFS */
 
 	SDL_GL_SwapWindow(gSDLWindow);					// end render loop
@@ -779,6 +798,235 @@ int	t,b,l,r;
 
 #pragma mark -
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define TEXTURE_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "OGL_Texture", __VA_ARGS__)
+#define TEXTURE_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "OGL_Texture", __VA_ARGS__)
+
+/***************** CONVERT TEXTURE FOR GLES **************************/
+//
+// OpenGL ES doesn't support many desktop GL texture formats.
+// This function converts texture data to RGBA/UNSIGNED_BYTE format
+// that OpenGL ES supports universally.
+//
+// Returns pointer to converted data (must be freed by caller), or NULL if
+// no conversion was needed.
+//
+
+static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
+                                   GLint *srcFormat, GLint *destFormat, GLint *dataType)
+{
+	int numPixels = width * height;
+	uint8_t *rgba = NULL;
+	
+	TEXTURE_LOGD("ConvertTextureForGLES: srcFormat=0x%x destFormat=0x%x dataType=0x%x size=%dx%d",
+	             *srcFormat, *destFormat, *dataType, width, height);
+	
+	// Convert GL_BGRA_EXT + GL_UNSIGNED_SHORT_1_5_5_5_REV (16-bit ARGB1555)
+	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_SHORT_1_5_5_5_REV)
+	{
+		TEXTURE_LOGD("Converting 16-bit ARGB1555 to RGBA8");
+		uint16_t *src = (uint16_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			uint16_t pixel = src[i];
+			// GL_UNSIGNED_SHORT_1_5_5_5_REV format: ARRRRRGGGGGBBBBB (1-5-5-5 bit layout)
+			uint8_t a = (pixel >> 15) & 0x01;
+			uint8_t r = (pixel >> 10) & 0x1F;
+			uint8_t g = (pixel >> 5) & 0x1F;
+			uint8_t b = pixel & 0x1F;
+			
+			rgba[i*4 + 0] = (r << 3) | (r >> 2);
+			rgba[i*4 + 1] = (g << 3) | (g >> 2);
+			rgba[i*4 + 2] = (b << 3) | (b >> 2);
+			rgba[i*4 + 3] = a ? 255 : 0;
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// Convert GL_BGRA_EXT + GL_UNSIGNED_INT_8_8_8_8_REV (32-bit ARGB8888)
+	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_INT_8_8_8_8_REV)
+	{
+		TEXTURE_LOGD("Converting 32-bit ARGB8888 to RGBA8");
+		uint32_t *src = (uint32_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			uint32_t pixel = src[i];
+			rgba[i*4 + 0] = (pixel >> 16) & 0xFF;  // R
+			rgba[i*4 + 1] = (pixel >> 8) & 0xFF;   // G
+			rgba[i*4 + 2] = pixel & 0xFF;          // B
+			rgba[i*4 + 3] = (pixel >> 24) & 0xFF;  // A
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// Convert GL_BGRA_EXT + GL_UNSIGNED_BYTE (simple BGRA to RGBA swap)
+	if (*srcFormat == GL_BGRA_EXT && *dataType == GL_UNSIGNED_BYTE)
+	{
+		TEXTURE_LOGD("Converting BGRA to RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i*4 + 2];  // R <- B
+			rgba[i*4 + 1] = src[i*4 + 1];  // G <- G
+			rgba[i*4 + 2] = src[i*4 + 0];  // B <- R
+			rgba[i*4 + 3] = src[i*4 + 3];  // A <- A
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// Handle any other GL_BGRA_EXT format
+	if (*srcFormat == GL_BGRA_EXT)
+	{
+		TEXTURE_LOGD("Converting unknown BGRA format (dataType=0x%x) to RGBA", *dataType);
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate %d bytes for texture conversion", numPixels * 4);
+			return NULL;
+		}
+		
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i*4 + 2];  // R <- B
+			rgba[i*4 + 1] = src[i*4 + 1];  // G <- G
+			rgba[i*4 + 2] = src[i*4 + 0];  // B <- R
+			rgba[i*4 + 3] = src[i*4 + 3];  // A <- A
+		}
+		
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// OpenGL ES 3.0: Convert legacy formats to supported formats
+	// GLES 3.0 doesn't support GL_LUMINANCE, GL_LUMINANCE_ALPHA, or GL_ALPHA as core
+	if (*srcFormat == GL_LUMINANCE)
+	{
+		TEXTURE_LOGD("Converting GL_LUMINANCE to GL_RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate for luminance conversion");
+			return NULL;
+		}
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i];
+			rgba[i*4 + 1] = src[i];
+			rgba[i*4 + 2] = src[i];
+			rgba[i*4 + 3] = 255;
+		}
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	if (*srcFormat == GL_LUMINANCE_ALPHA)
+	{
+		TEXTURE_LOGD("Converting GL_LUMINANCE_ALPHA to GL_RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate for luminance-alpha conversion");
+			return NULL;
+		}
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i*2];
+			rgba[i*4 + 1] = src[i*2];
+			rgba[i*4 + 2] = src[i*2];
+			rgba[i*4 + 3] = src[i*2 + 1];
+		}
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	if (*srcFormat == GL_ALPHA)
+	{
+		TEXTURE_LOGD("Converting GL_ALPHA to GL_RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate for alpha conversion");
+			return NULL;
+		}
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = 255;
+			rgba[i*4 + 1] = 255;
+			rgba[i*4 + 2] = 255;
+			rgba[i*4 + 3] = src[i];
+		}
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// For standard formats, ensure destFormat matches srcFormat for ES compatibility
+	if (*srcFormat == GL_RGBA)
+	{
+		if (*destFormat != GL_RGBA)
+		{
+			TEXTURE_LOGD("Forcing destFormat to GL_RGBA (was 0x%x)", *destFormat);
+			*destFormat = GL_RGBA;
+		}
+	}
+	else if (*srcFormat == GL_RGB)
+	{
+		if (*destFormat != GL_RGB)
+		{
+			TEXTURE_LOGD("Forcing destFormat to GL_RGB (was 0x%x)", *destFormat);
+			*destFormat = GL_RGB;
+		}
+	}
+	else
+	{
+		// Unknown source format - log warning
+		TEXTURE_LOGD("Unknown srcFormat 0x%x - may cause GL errors", *srcFormat);
+	}
+	
+	TEXTURE_LOGD("No conversion needed, final: srcFormat=0x%x destFormat=0x%x dataType=0x%x",
+	             *srcFormat, *destFormat, *dataType);
+	
+	return NULL;
+}
+#endif // __ANDROID__
 
 /***************** OGL TEXTUREMAP LOAD **************************/
 
@@ -786,7 +1034,16 @@ GLuint OGL_TextureMap_Load(void *imageMemory, int width, int height,
 							GLint srcFormat,  GLint destFormat, GLint dataType)
 {
 GLuint	textureName;
+void	*convertedData = NULL;
 
+#ifdef __ANDROID__
+	// Convert texture format if needed for OpenGL ES compatibility
+	convertedData = ConvertTextureForGLES(imageMemory, width, height, &srcFormat, &destFormat, &dataType);
+	if (convertedData)
+	{
+		imageMemory = convertedData;
+	}
+#endif
 
 	if (gGamePrefs.anaglyphMode == ANAGLYPH_COLOR)
 		ConvertTextureToColorAnaglyph(imageMemory, width, height, srcFormat, dataType);
@@ -825,6 +1082,16 @@ GLuint	textureName;
 				/* SET THIS TEXTURE AS CURRENTLY ACTIVE FOR DRAWING */
 
 	OGL_Texture_SetOpenGLTexture(textureName);
+
+#ifdef __ANDROID__
+	// Free converted data if we allocated any
+	if (convertedData)
+	{
+		SafeDisposePtr((Ptr)convertedData);
+	}
+#else
+	(void)convertedData; // Suppress unused variable warning on non-Android
+#endif
 
 	return(textureName);
 }

@@ -151,7 +151,7 @@ ObjNode	*newObj;
 
 	SetSkeletonAnim(newObj->Skeleton, ICECUBE_ANIM_STAND);
 
-	newObj->StatusBits |= STATUS_BIT_NOLIGHTING;
+	newObj->StatusBits |= STATUS_BIT_NOLIGHTING | STATUS_BIT_NOZWRITES;
 
 	newObj->ColorFilter.a = .99;
 
@@ -967,7 +967,7 @@ ObjNode	*icicle;
 	gNewObjectDefinition.group 		= MODEL_GROUP_LEVELSPECIFIC;
 	gNewObjectDefinition.type 		= FIREICE_ObjType_Icicle;
 	gNewObjectDefinition.coord		= enemy->Coord;
-	gNewObjectDefinition.flags 		= gAutoFadeStatusBits  | STATUS_BIT_NOLIGHTING;
+	gNewObjectDefinition.flags 		= gAutoFadeStatusBits  | STATUS_BIT_NOLIGHTING | STATUS_BIT_NOZWRITES;
 	gNewObjectDefinition.slot 		= SLOT_OF_DUMB - 1;
 	gNewObjectDefinition.moveCall 	= nil;
 	gNewObjectDefinition.rot 		= 0;

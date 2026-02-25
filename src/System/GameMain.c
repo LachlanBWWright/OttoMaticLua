@@ -1005,7 +1005,7 @@ void GameMain(void)
 
 	Pomme_FlushPtrTracking(false);
 
-#if _DEBUG
+#if _DEBUG && !defined(__ANDROID__)
 	gDebugMode = 1;
 #endif
 
