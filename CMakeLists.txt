@@ -95,7 +95,9 @@ endif()
 
 add_subdirectory(extern/Pomme)
 
-find_package(OpenGL REQUIRED)
+if(NOT EMSCRIPTEN)
+	find_package(OpenGL REQUIRED)
+endif()
 
 #------------------------------------------------------------------------------
 # EXECUTABLE TARGET
@@ -122,6 +124,26 @@ endif()
 add_executable(${GAME_TARGET} ${GAME_SOURCES})
 
 target_include_directories(${GAME_TARGET} PRIVATE ${GAME_SRCDIR}/Headers)
+
+if(EMSCRIPTEN)
+	# Output an HTML page that wraps the WebAssembly module
+	set_target_properties(${GAME_TARGET} PROPERTIES SUFFIX ".html")
+
+	# Emscripten link flags for the WebAssembly build:
+	#   ASYNCIFY        - allows blocking C loops to yield to the browser event loop
+	#   FULL_ES2        - OpenGL ES 2.0 compatibility layer (maps to WebGL 1)
+	#   preload-file    - embed the Data/ folder into the virtual filesystem
+	#   EXPORTED_FUNCTIONS - export extra C functions callable from JavaScript
+	target_link_options(${GAME_TARGET} PRIVATE
+		"SHELL:-sASYNCIFY=1"
+		"SHELL:-sFULL_ES2=1"
+		"SHELL:-sALLOW_MEMORY_GROWTH=1"
+		"SHELL:-sINITIAL_MEMORY=268435456"
+		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
+		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath']"
+		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+	)
+endif()
 
 #------------------------------------------------------------------------------
 # COMPILER/LINKER OPTIONS
@@ -198,7 +220,7 @@ if(SANITIZE)
 endif()
 
 # Explicitly link math lib on Linux
-if(NOT APPLE AND NOT WIN32)
+if(NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN)
 	target_link_libraries(${GAME_TARGET} PRIVATE m)
 endif()
 
@@ -209,8 +231,12 @@ else()
 	target_link_libraries(${GAME_TARGET} PRIVATE SDL3::SDL3-static)
 endif()
 
-# Link core dependencies
-target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+# Link core dependencies (OpenGL not needed for Emscripten - WebGL provided via -sFULL_ES2)
+if(NOT EMSCRIPTEN)
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+else()
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme)
+endif()
 
 # Add required frameworks for KillMacMouseAcceleration
 if(APPLE)
@@ -277,14 +303,18 @@ set_target_properties(${GAME_TARGET} PROPERTIES
 # POST-BUILD (COPY ASSETS, ETC.)
 #------------------------------------------------------------------------------
 
-if(APPLE)
+if(EMSCRIPTEN)
+	# For Emscripten, data is embedded via --preload-file; no extra copy step needed
+elseif(APPLE)
 	set(GAME_DATA_TARGET_LOCATION "$<TARGET_FILE_DIR:${GAME_TARGET}>/../Resources")
 else()
 	set(GAME_DATA_TARGET_LOCATION "$<TARGET_FILE_DIR:${GAME_TARGET}>/Data")
 endif()
 
-add_custom_command(TARGET ${GAME_TARGET} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_directory "${GAME_DATADIR}" "${GAME_DATA_TARGET_LOCATION}")
+if(NOT EMSCRIPTEN)
+	add_custom_command(TARGET ${GAME_TARGET} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory "${GAME_DATADIR}" "${GAME_DATA_TARGET_LOCATION}")
+endif()
 
 if(APPLE)
 	set(INFO_PLIST "${GAME_DATA_TARGET_LOCATION}/../Info.plist")

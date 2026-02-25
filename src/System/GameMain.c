@@ -11,6 +11,10 @@
 
 #include "game.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 /****************************/
 /*    PROTOTYPES            */
 /****************************/
@@ -264,6 +268,9 @@ static void PlayArea(void)
 				// Also gathers frame rate info for the net clients.
 				//
 
+#ifdef __EMSCRIPTEN__
+		emscripten_sleep(0);			// yield to browser event loop (requires ASYNCIFY)
+#endif
 
 		UpdateInput();									// read local keys
 
@@ -1008,6 +1015,22 @@ void GameMain(void)
 #if _DEBUG
 	gDebugMode = 1;
 #endif
+
+		/**********************************************/
+		/* DIRECT LEVEL LOAD (level editor / WASM mode) */
+		/**********************************************/
+		//
+		// When gDirectLevelNum >= 0 (set via --level N),
+		// skip the legal screen and main menu and jump
+		// directly into the specified level.
+		//
+
+	if (gDirectLevelNum >= 0)
+	{
+		gLevelNum = gDirectLevelNum;
+		PlayGame();
+		return;
+	}
 
 		/* SHOW LEGAL SCREEN */
 

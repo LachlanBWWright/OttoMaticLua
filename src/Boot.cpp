@@ -5,6 +5,10 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include "Pomme.h"
 #include "PommeInit.h"
 #include "PommeFiles.h"
@@ -16,7 +20,46 @@ extern "C"
 	SDL_Window* gSDLWindow = nullptr;
 	FSSpec gDataSpec;
 	int gCurrentAntialiasingLevel;
+
+	// Level editor / WASM interface globals
+	int  gDirectLevelNum        = -1;		// -1 = use default game flow; >=0 = load directly into this level
+	char gTerrainOverridePath[512] = {0};	// optional terrain file path override for the current level
 }
+
+// Terrain override spec (populated from gTerrainOverridePath when non-empty)
+static FSSpec sTerrainOverrideSpec;
+static bool   sHasTerrainOverride = false;
+
+// C-callable accessor used by File.c
+extern "C" FSSpec* GetTerrainOverrideSpec(void)
+{
+	return sHasTerrainOverride ? &sTerrainOverrideSpec : nullptr;
+}
+
+// Build a terrain override FSSpec from gTerrainOverridePath (called after Pomme init)
+static void BuildTerrainOverrideSpec(void)
+{
+	if (gTerrainOverridePath[0] == '\0')
+		return;
+	try
+	{
+		sTerrainOverrideSpec = Pomme::Files::HostPathToFSSpec(fs::path(gTerrainOverridePath));
+		sHasTerrainOverride = true;
+	}
+	catch (...)
+	{
+		SDL_Log("Warning: couldn't resolve terrain override path: %s", gTerrainOverridePath);
+	}
+}
+
+#ifdef __EMSCRIPTEN__
+// Exported function: set terrain override path from JavaScript
+EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_SetTerrainPath(const char* path)
+{
+	SDL_strlcpy(gTerrainOverridePath, path, sizeof(gTerrainOverridePath));
+	sHasTerrainOverride = false;	// will be rebuilt on next level load
+}
+#endif
 
 static fs::path FindGameData(const char* executablePath)
 {
@@ -69,6 +112,29 @@ tryAgain:
 	return dataPath;
 }
 
+// Parse level editor / WASM command-line arguments
+// --level N        : skip menus and load directly into level N (0-based)
+// --terrain PATH   : override the terrain file for the specified level
+static void ParseLevelEditorArgs(int argc, char** argv)
+{
+	for (int i = 1; i < argc; i++)
+	{
+		if (SDL_strcmp(argv[i], "--level") == 0 && i + 1 < argc)
+		{
+			gDirectLevelNum = SDL_atoi(argv[++i]);
+			if (gDirectLevelNum < 0 || gDirectLevelNum >= NUM_LEVELS)
+			{
+				SDL_Log("Warning: --level %d is out of range (0-%d), ignoring", gDirectLevelNum, NUM_LEVELS - 1);
+				gDirectLevelNum = -1;
+			}
+		}
+		else if (SDL_strcmp(argv[i], "--terrain") == 0 && i + 1 < argc)
+		{
+			SDL_strlcpy(gTerrainOverridePath, argv[++i], sizeof(gTerrainOverridePath));
+		}
+	}
+}
+
 static void Boot(int argc, char** argv)
 {
 	SDL_SetAppMetadata(GAME_FULL_NAME, GAME_VERSION, GAME_IDENTIFIER);
@@ -78,12 +144,18 @@ static void Boot(int argc, char** argv)
 	SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
 #endif
 
+	// Parse level editor / WASM arguments before Pomme init
+	ParseLevelEditorArgs(argc, argv);
+
 	// Start our "machine"
 	Pomme::Init();
 
 	// Find path to game data folder
 	const char* executablePath = argc > 0 ? argv[0] : NULL;
 	fs::path dataPath = FindGameData(executablePath);
+
+	// Build terrain override FSSpec if a path was specified
+	BuildTerrainOverrideSpec();
 
 	// Load game prefs before starting
 	LoadPrefs();
@@ -96,7 +168,12 @@ retryVideo:
 	}
 
 	// Create window
+#ifdef __EMSCRIPTEN__
+	// WebAssembly: use OpenGL ES 2 (maps to WebGL 1)
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+#endif
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 

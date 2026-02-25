@@ -933,7 +933,17 @@ levelSpriteFiles[NUM_LEVELS] =
 			// must do this after creating the view!
 			//
 
-	FSMakeFSSpec(gDataSpec.vRefNum, gDataSpec.parID, terrainFiles[gLevelNum], &spec);
+	{
+		FSSpec* overrideSpec = GetTerrainOverrideSpec();
+		if (overrideSpec)
+		{
+			spec = *overrideSpec;	// use caller-specified terrain file (level editor / WASM override)
+		}
+		else
+		{
+			FSMakeFSSpec(gDataSpec.vRefNum, gDataSpec.parID, terrainFiles[gLevelNum], &spec);
+		}
+	}
 	LoadPlayfield(&spec);
 
 }

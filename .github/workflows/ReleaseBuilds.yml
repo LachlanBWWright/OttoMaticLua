@@ -1,6 +1,10 @@
 name: Make Release Builds
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build-linux-appimage:
@@ -86,3 +90,145 @@ jobs:
           name: ${{env.ARTIFACT_NAME}}
           path: dist/
           compression-level: 0
+
+  build-wasm:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive'}
+      - name: Install Emscripten (emsdk)
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+      - name: Install CMake
+        run: |
+          sudo apt update
+          sudo apt install -y cmake
+      - name: Get artifact name
+        run: echo "ARTIFACT_NAME=$(python3 build.py --wasm --print-artifact-name)" >> $GITHUB_ENV
+      - run: python3 build.py --wasm --dependencies
+      - run: python3 build.py --wasm --configure
+      - run: python3 build.py --wasm --build
+      - run: python3 build.py --wasm --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{env.ARTIFACT_NAME}}
+          path: dist/
+          compression-level: 0
+
+  build-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive'}
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install NDK and CMake via sdkmanager
+        run: sdkmanager "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Download SDL3 source
+        run: |
+          SDL_VER=$(python3 -c "import re; m=re.search(r\"sdl_ver\s*=\s*'([^']+)'\", open('build.py').read()) or re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          mkdir -p extern/SDL3-src
+          curl -L "https://libsdl.org/release/SDL3-${SDL_VER}.tar.gz" | tar -xz --strip-components=1 -C extern/SDL3-src
+      - name: Set up Android build from SDL3 template
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
+        run: |
+          SDL_VER=$(python3 -c "import re; m=re.search(r\"sdl_ver\s*=\s*'([^']+)'\", open('build.py').read()) or re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          GAME_VER=$(python3 -c "import re; m=re.search(r'game_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+
+          # Use SDL3's bundled Android project as the base
+          cp -r extern/SDL3-src/android-project android-build
+
+          # Link SDL source into the Android project
+          ln -s $(pwd)/extern/SDL3-src android-build/app/jni/SDL
+
+          # Copy game source into the Android project's jni layer
+          mkdir -p android-build/app/jni/src
+          rsync -a src/ android-build/app/jni/src/game/
+          rsync -a extern/Pomme/ android-build/app/jni/src/extern/Pomme/
+          cp CMakeLists.txt android-build/app/jni/src/CMakeLists.txt
+
+          # Copy game data as Android assets
+          mkdir -p android-build/app/src/main/assets
+          cp -r Data android-build/app/src/main/assets/
+
+          cd android-build
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+          mkdir -p ../dist
+          find . -name "*.apk" -exec cp {} "../dist/OttoMatic-${GAME_VER}-android.apk" \;
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OttoMatic-android
+          path: dist/*.apk
+          compression-level: 0
+
+  publish-release:
+    needs: [build-wasm, build-android]
+    runs-on: ubuntu-22.04
+    # Only publish releases on push to main (not on manual workflow_dispatch)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-wasm*"
+          path: release-artifacts
+          merge-multiple: true
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: OttoMatic-android
+          path: release-artifacts
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GAME_VER=$(python3 -c "import re; m=re.search(r'game_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          TAG="v${GAME_VER}-wasm-android"
+
+          # Delete existing rolling release tag if present
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git push origin --delete "refs/tags/$TAG" 2>/dev/null || true
+
+          # Create new release with all artifacts
+          gh release create "$TAG" \
+            --title "Otto Matic ${GAME_VER} - WebAssembly & Android" \
+            --notes "Automated release built from commit ${{ github.sha }}.
+
+## WebAssembly
+Extract the \`*-wasm.zip\` archive and serve the contents from a web server to play in the browser.
+
+## Android
+Install the \`.apk\` file on an Android device (requires allowing installs from unknown sources).
+
+## Level editor integration
+Both builds support direct level loading and terrain override:
+- Pass \`--level N\` (0-9) to skip menus and load a specific level directly.
+- Pass \`--terrain PATH\` to override the terrain file for the current level.
+
+In the WebAssembly build, the following JavaScript functions are exported:
+\`\`\`js
+// Enable/disable fence collisions (cheat interface)
+Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'], [0]); // disable
+Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'], [1]); // re-enable
+
+// Override terrain file for the current level (write the file to the virtual FS first)
+FS.writeFile('/Data/Terrain/custom.ter', yourTerrainData);
+Module.ccall('OttoMatic_SetTerrainPath', null, ['string'], ['/Data/Terrain/custom.ter']);
+\`\`\`
+" \
+            release-artifacts/*.zip release-artifacts/*.apk

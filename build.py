@@ -107,6 +107,9 @@ parser.add_argument("--dist-dir", metavar="<dir>", default=dist_dir,
 parser.add_argument("--print-artifact-name", default=False, action="store_true",
         help="print artifact name and exit")
 
+parser.add_argument("--wasm", default=False, action="store_true",
+        help="build a WebAssembly bundle using Emscripten (overrides platform auto-detection)")
+
 if SYSTEM == "Linux":
     parser.add_argument("--system-sdl", default=False, action="store_true",
         help="use system SDL instead of building SDL from scratch")
@@ -438,6 +441,68 @@ class LinuxProject(Project):
             rm_if_exists(self.get_artifact_path())
             call([appimagetool_path, appdir, self.get_artifact_path()])
 
+
+class EmscriptenProject(Project):
+    """Build target for WebAssembly via Emscripten."""
+
+    def __init__(self, dir_name="build-wasm"):
+        super().__init__(dir_name)
+        self.build_args += ["-j", str(NPROC)]
+
+    def get_artifact_name(self):
+        return f"{game_name}-{game_ver}-wasm.zip"
+
+    def prepare_dependencies(self):
+        """Download SDL3 source for Emscripten build (emsdk does not bundle SDL3)."""
+        sdl_source_dir = f"{libs_dir}/SDL3-{sdl_ver}"
+        if os.path.exists(sdl_source_dir):
+            log(f"SDL3 source already present: {sdl_source_dir}")
+            return
+
+        sdl_zip_path = get_package(f"https://libsdl.org/release/SDL3-{sdl_ver}.tar.gz")
+        shutil.unpack_archive(sdl_zip_path, libs_dir)
+        log(f"SDL3 source unpacked to: {sdl_source_dir}")
+
+    def configure(self):
+        fatlog(f"Configuring {self.dir_name} (Emscripten/WASM)")
+
+        sdl_source_dir = f"{libs_dir}/SDL3-{sdl_ver}"
+        if not os.path.exists(sdl_source_dir):
+            die(f"SDL3 source not found at {sdl_source_dir}. Run --dependencies first.")
+
+        if os.path.exists(self.dir_name):
+            shutil.rmtree(self.dir_name)
+
+        # Use emcmake to wrap cmake so it picks up the Emscripten toolchain
+        call([
+            "emcmake", "cmake", "-S", ".", "-B", self.dir_name,
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DBUILD_SDL_FROM_SOURCE=ON",
+            f"-DSDL3_DIR={sdl_source_dir}",
+        ])
+
+    def build(self):
+        call(["cmake", "--build", self.dir_name, "-j", str(NPROC)])
+
+    def package(self):
+        appdir = f"{cache_dir}/{game_name}-{game_ver}-wasm"
+        rmtree_if_exists(appdir)
+        os.makedirs(appdir, exist_ok=True)
+
+        # Copy the Emscripten output files (.html, .js, .wasm, .data)
+        for ext in [".html", ".js", ".wasm", ".data"]:
+            src = f"{self.dir_name}/{game_name}{ext}"
+            if os.path.exists(src):
+                shutil.copy(src, appdir)
+            else:
+                log(f"Note: {src} not found (may be normal if data is inlined)")
+
+        self.copy_documentation(appdir, everything=False)
+
+        os.makedirs(dist_dir, exist_ok=True)
+        rm_if_exists(self.get_artifact_path())
+        zipdir(self.get_artifact_path(), appdir, f"{game_name}-{game_ver}-wasm")
+
 #----------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -447,7 +512,10 @@ if __name__ == "__main__":
     #----------------------------------------------------------------
     # Set up project metadata
 
-    if SYSTEM == "Windows":
+    if args.wasm:
+        project = EmscriptenProject(build_dir)
+
+    elif SYSTEM == "Windows":
         project = WindowsProject(build_dir)
 
     elif SYSTEM == "Darwin":
