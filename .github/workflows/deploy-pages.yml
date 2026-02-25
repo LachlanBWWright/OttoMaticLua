@@ -80,6 +80,9 @@ jobs:
           # copy it only if it exists (build might inline it instead)
           [ -f build/OttoMatic.data ] && cp build/OttoMatic.data _site/OttoMatic.data || true
 
+          # Prevent Jekyll from processing our static site files
+          touch _site/.nojekyll
+
           echo "Site contents:"
           ls -lh _site/
 
