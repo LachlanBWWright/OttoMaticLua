@@ -10,6 +10,14 @@ cd OttoMatic
 python3 build.py
 ```
 
+To build the **WebAssembly** (browser) version, install [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) and run:
+
+```
+python3 build.py --wasm
+```
+
+The WASM bundle will be produced in `dist/OttoMatic-<version>-wasm.zip`. Extract and serve from a web server.
+
 If you want to build the game **manually** instead, the rest of this document describes how to do just that on each of the big 3 desktop operating systems.
 
 ## How to build the game manually on macOS
@@ -73,3 +81,59 @@ If you want to build the game **manually** instead, the rest of this document de
     ```
     If you'd like to enable runtime sanitizers, append `-DSANITIZE=1` to the **first** `cmake` call above.
 1. The game gets built in `build/OttoMatic`. Enjoy!
+
+## How to build the WebAssembly version manually
+
+1. Install the prerequisites:
+    - [Emscripten SDK (emsdk)](https://emscripten.org/docs/getting_started/downloads.html) and activate it
+    - CMake 3.21+
+1. Clone the repo **recursively**:
+    ```
+    git clone --recurse-submodules https://github.com/jorio/OttoMatic
+    cd OttoMatic
+    ```
+1. Download SDL3 source and unpack it into `extern/SDL3-3.2.4`:
+    ```
+    curl -LO https://libsdl.org/release/SDL3-3.2.4.tar.gz
+    tar -xzf SDL3-3.2.4.tar.gz -C extern/
+    ```
+1. Configure with Emscripten:
+    ```
+    emcmake cmake -S . -B build-wasm \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SDL_FROM_SOURCE=ON \
+        -DSDL_STATIC=ON \
+        -DSDL3_DIR=extern/SDL3-3.2.4
+    ```
+1. Build:
+    ```
+    cmake --build build-wasm -j$(nproc)
+    ```
+1. The output is `build-wasm/OttoMatic.html` (plus `.js`, `.wasm`, `.data`). Serve these files from a web server to play.
+
+## Level editor integration
+
+The game supports direct level loading and terrain file override for integration with level editors:
+
+### Command-line arguments (desktop and WASM via `Module.arguments`)
+
+- `--level N` — Skip the main menu and load level N directly (0 = Farm, 1 = Blob, etc.)
+- `--terrain PATH` — Override the terrain file for the current level with a custom `.ter` file
+
+### JavaScript API (WebAssembly only)
+
+After the WASM module is initialized, you can call these exported functions from JavaScript:
+
+```js
+// Disable fence collision detection (useful for level editing/walkthrough)
+Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'], [0]);
+
+// Re-enable fence collision detection
+Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'], [1]);
+
+// Override the terrain file for the current level
+// (write the .ter file to the virtual filesystem first)
+FS.writeFile('/Data/Terrain/custom.ter', yourTerrainData);
+Module.ccall('OttoMatic_SetTerrainPath', null, ['string'], ['/Data/Terrain/custom.ter']);
+```
+
