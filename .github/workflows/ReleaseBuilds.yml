@@ -128,32 +128,34 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install NDK and CMake via sdkmanager
-        run: sdkmanager "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Install Android NDK
+        # Android SDK is pre-installed on ubuntu-22.04 at $ANDROID_SDK_ROOT; just install the NDK
+        run: sdkmanager "ndk;27.2.12479018"
       - name: Download SDL3 source
         run: |
-          SDL_VER=$(python3 -c "import re; m=re.search(r\"sdl_ver\s*=\s*'([^']+)'\", open('build.py').read()) or re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          SDL_VER=$(python3 -c "import re; m=re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
           mkdir -p extern/SDL3-src
-          curl -L "https://libsdl.org/release/SDL3-${SDL_VER}.tar.gz" | tar -xz --strip-components=1 -C extern/SDL3-src
-      - name: Set up Android build from SDL3 template
+          curl -fsSL "https://libsdl.org/release/SDL3-${SDL_VER}.tar.gz" | tar -xz --strip-components=1 -C extern/SDL3-src
+      - name: Build Android APK via SDL3 Android project template
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
         run: |
-          SDL_VER=$(python3 -c "import re; m=re.search(r\"sdl_ver\s*=\s*'([^']+)'\", open('build.py').read()) or re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          SDL_VER=$(python3 -c "import re; m=re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
           GAME_VER=$(python3 -c "import re; m=re.search(r'game_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
 
-          # Use SDL3's bundled Android project as the base
+          # Use SDL3's bundled Android project as the build scaffold
           cp -r extern/SDL3-src/android-project android-build
 
-          # Link SDL source into the Android project
-          ln -s $(pwd)/extern/SDL3-src android-build/app/jni/SDL
+          # Point app/jni/SDL at the SDL3 source tree (built as subdirectory by jni/CMakeLists.txt)
+          ln -s "$(pwd)/extern/SDL3-src" android-build/app/jni/SDL
 
-          # Copy game source into the Android project's jni layer
-          mkdir -p android-build/app/jni/src
-          rsync -a src/ android-build/app/jni/src/game/
-          rsync -a extern/Pomme/ android-build/app/jni/src/extern/Pomme/
+          # Copy game source into app/jni/src/ so that GAME_SRCDIR = app/jni/src (CMAKE_SOURCE_DIR = app/jni/)
+          rsync -a src/ android-build/app/jni/src/
+
+          # Copy Pomme submodule into app/jni/extern/Pomme/ (CMakeLists.txt does add_subdirectory(extern/Pomme))
+          rsync -a extern/Pomme/ android-build/app/jni/extern/Pomme/
+
+          # Place the game CMakeLists.txt as app/jni/src/CMakeLists.txt (SDL template calls add_subdirectory(src))
           cp CMakeLists.txt android-build/app/jni/src/CMakeLists.txt
 
           # Copy game data as Android assets
@@ -162,7 +164,7 @@ jobs:
 
           cd android-build
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug -PBUILD_WITH_CMAKE=true
 
           mkdir -p ../dist
           find . -name "*.apk" -exec cp {} "../dist/OttoMatic-${GAME_VER}-android.apk" \;
