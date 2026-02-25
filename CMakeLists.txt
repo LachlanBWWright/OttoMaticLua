@@ -358,6 +358,6 @@ if(WIN32)
 endif()
 
 # Copy documentation to output folder (not needed for Android - distributed via APK assets)
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+if(NOT ANDROID)
 	configure_file(${CMAKE_SOURCE_DIR}/packaging/ReadMe.txt.in ${CMAKE_CURRENT_BINARY_DIR}/ReadMe.txt)
 endif()
