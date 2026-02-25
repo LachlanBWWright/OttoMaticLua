@@ -113,7 +113,7 @@ ObjNode	*newObj;
 	gNewObjectDefinition.coord.x 	= x;
 	gNewObjectDefinition.coord.y 	= GetTerrainY(x,z);
 	gNewObjectDefinition.coord.z 	= z;
-	gNewObjectDefinition.flags 		= gAutoFadeStatusBits | STATUS_BIT_UVTRANSFORM;
+	gNewObjectDefinition.flags 		= gAutoFadeStatusBits | STATUS_BIT_UVTRANSFORM | STATUS_BIT_NOZWRITES;
 	gNewObjectDefinition.slot 		= SLOT_OF_DUMB-1;
 	gNewObjectDefinition.moveCall 	= nil;
 	gNewObjectDefinition.rot 		= 0;

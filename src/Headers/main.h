@@ -30,3 +30,7 @@ void MoveEverything(void);
 void InitDefaultPrefs(void);
 void DrawArea(void);
 void GameMain(void);
+
+#ifdef __ANDROID__
+int Android_ShowLevelSelectDialog(void);
+#endif

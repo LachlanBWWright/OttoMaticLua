@@ -577,7 +577,7 @@ float	scaleX,scaleZ,scaleY;
 	gNewObjectDefinition.coord.z 	= human->Coord.z;
 	gNewObjectDefinition.coord.y 	= GetMinTerrainY(human->Coord.x, human->Coord.z, gNewObjectDefinition.group, gNewObjectDefinition.type, gNewObjectDefinition.scale);
 	gNewObjectDefinition.flags 		= gAutoFadeStatusBits | STATUS_BIT_KEEPBACKFACES |
-									 STATUS_BIT_NOFOG | STATUS_BIT_NOLIGHTING;
+									 STATUS_BIT_NOFOG | STATUS_BIT_NOLIGHTING | STATUS_BIT_NOZWRITES;
 	gNewObjectDefinition.slot 		= SLOT_OF_DUMB-3;
 	gNewObjectDefinition.moveCall 	= nil;
 	gNewObjectDefinition.rot 		= human->Rot.y;

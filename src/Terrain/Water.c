@@ -324,6 +324,12 @@ float	ud1, uv1, ud2, uv2;
 
 	gNumWaterDrawn = 0;
 
+		/* Transparent surfaces should not write to the depth buffer.
+		 * This prevents water from blocking particles/sparkles drawn
+		 * after it, and lets the water render even when semi-transparent
+		 * geometry has already written depth values at the same pixels. */
+	glDepthMask(GL_FALSE);
+
 	for (f = 0; f < gNumWaterPatches; f++)
 	{
 		short	waterType = gWaterList[f].type;
@@ -373,6 +379,7 @@ float	ud1, uv1, ud2, uv2;
 
 	gGlobalTransparency = 1.0;
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDepthMask(GL_TRUE);
 }
 
 #pragma mark -
