@@ -323,6 +323,12 @@ static void Boot(int argc, char** argv)
 	// Load game prefs before starting
 	LoadPrefs();
 
+	// Prevent SDL from synthesising mouse button events from touch events.
+	// Without this, every tap on the touch screen generates a left-mouse-button
+	// click that is mapped to kNeed_Shoot, causing the game to fire the weapon
+	// (or trigger other mouse-bound actions) on every touch.
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+
 retryVideo:
 	// Initialize SDL video subsystem
 	if (!SDL_Init(SDL_INIT_VIDEO))
@@ -331,17 +337,17 @@ retryVideo:
 	}
 
 #ifdef __ANDROID__
-	// On Android, use OpenGL ES 1.1 for fixed-function pipeline support
+	// On Android, use OpenGL ES 3.0 for shader-based rendering
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	
 	// Android windows are fullscreen by default
 	gSDLWindow = SDL_CreateWindow(
 		GAME_FULL_NAME " " GAME_VERSION, 0, 0,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
 	
-	LOGI("Created Android window with OpenGL ES 1.1");
+	LOGI("Created Android window with OpenGL ES 3.0");
 #else
 	// Create window
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);

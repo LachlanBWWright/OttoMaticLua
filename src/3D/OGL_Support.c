@@ -305,6 +305,10 @@ static void OGL_DisposeDrawContext(void)
 		return;
 	}
 
+#ifdef __ANDROID__
+	GLESBridge_Shutdown();
+#endif
+
 	SDL_GL_MakeCurrent(gSDLWindow, NULL);		// make context not current
 	SDL_GL_DestroyContext(gAGLContext);			// nuke context
 	gAGLContext = nil;
@@ -748,6 +752,15 @@ do_anaglyph:
 			/* END RENDER */
 			/**************/
 
+#ifdef __ANDROID__
+		/* DRAW TOUCH CONTROLS OVERLAY ON ALL SCREENS */
+
+	if (TouchControls_IsVisible())
+	{
+		TouchControls_Draw();
+	}
+#endif
+
            /* SWAP THE BUFFS */
 
 	SDL_GL_SwapWindow(gSDLWindow);					// end render loop
@@ -917,8 +930,75 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 		return rgba;
 	}
 	
-	// OpenGL ES 1.1 requires internal format (destFormat) to match external format
-	// Force destFormat to a valid ES internal format
+	// OpenGL ES 3.0: Convert legacy formats to supported formats
+	// GLES 3.0 doesn't support GL_LUMINANCE, GL_LUMINANCE_ALPHA, or GL_ALPHA as core
+	if (*srcFormat == GL_LUMINANCE)
+	{
+		TEXTURE_LOGD("Converting GL_LUMINANCE to GL_RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate for luminance conversion");
+			return NULL;
+		}
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i];
+			rgba[i*4 + 1] = src[i];
+			rgba[i*4 + 2] = src[i];
+			rgba[i*4 + 3] = 255;
+		}
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	if (*srcFormat == GL_LUMINANCE_ALPHA)
+	{
+		TEXTURE_LOGD("Converting GL_LUMINANCE_ALPHA to GL_RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate for luminance-alpha conversion");
+			return NULL;
+		}
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = src[i*2];
+			rgba[i*4 + 1] = src[i*2];
+			rgba[i*4 + 2] = src[i*2];
+			rgba[i*4 + 3] = src[i*2 + 1];
+		}
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	if (*srcFormat == GL_ALPHA)
+	{
+		TEXTURE_LOGD("Converting GL_ALPHA to GL_RGBA");
+		uint8_t *src = (uint8_t *)imageMemory;
+		rgba = (uint8_t *)AllocPtr(numPixels * 4);
+		if (!rgba) {
+			TEXTURE_LOGE("Failed to allocate for alpha conversion");
+			return NULL;
+		}
+		for (int i = 0; i < numPixels; i++)
+		{
+			rgba[i*4 + 0] = 255;
+			rgba[i*4 + 1] = 255;
+			rgba[i*4 + 2] = 255;
+			rgba[i*4 + 3] = src[i];
+		}
+		*srcFormat = GL_RGBA;
+		*destFormat = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		return rgba;
+	}
+	
+	// For standard formats, ensure destFormat matches srcFormat for ES compatibility
 	if (*srcFormat == GL_RGBA)
 	{
 		if (*destFormat != GL_RGBA)
@@ -934,18 +1014,6 @@ static void* ConvertTextureForGLES(void *imageMemory, int width, int height,
 			TEXTURE_LOGD("Forcing destFormat to GL_RGB (was 0x%x)", *destFormat);
 			*destFormat = GL_RGB;
 		}
-	}
-	else if (*srcFormat == GL_LUMINANCE_ALPHA)
-	{
-		*destFormat = GL_LUMINANCE_ALPHA;
-	}
-	else if (*srcFormat == GL_LUMINANCE)
-	{
-		*destFormat = GL_LUMINANCE;
-	}
-	else if (*srcFormat == GL_ALPHA)
-	{
-		*destFormat = GL_ALPHA;
 	}
 	else
 	{

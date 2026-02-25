@@ -354,9 +354,6 @@ static void DrawAreaExtraStuff(ObjNode* theNode)
 	DrawLensFlare();											// draw lens flare
 	DrawInfobar();												// draw infobar last
 	DrawDeathExit();											// draw death exit stuff
-
-	// Draw touch controls overlay (mobile devices)
-	TouchControls_Draw();
 }
 
 
@@ -1008,7 +1005,7 @@ void GameMain(void)
 
 	Pomme_FlushPtrTracking(false);
 
-#if _DEBUG
+#if _DEBUG && !defined(__ANDROID__)
 	gDebugMode = 1;
 #endif
 

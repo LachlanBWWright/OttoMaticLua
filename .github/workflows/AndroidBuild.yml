@@ -2,7 +2,7 @@ name: Android Build
 
 on:
   push:
-    branches: [ main, copilot/convert-sdl3-game-android ]
+    branches: [ main, copilot/convert-sdl3-game-android, copilot/refactor-opengl-support ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -67,7 +67,7 @@ jobs:
         chmod +x gradlew
         ./gradlew assembleDebug --stacktrace
     
-    - name: Upload APK
+    - name: Upload Debug APK (all ABIs)
       uses: actions/upload-artifact@v4
       with:
         name: otto-matic-debug-apk

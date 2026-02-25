@@ -807,12 +807,10 @@ use_current:
 													break;
 										}
 
-#ifndef __ANDROID__
 										glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);										// activate reflection mapping
 										glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
 										glEnable(GL_TEXTURE_GEN_S);
 										glEnable(GL_TEXTURE_GEN_T);
-#endif
 
 									}
 								}
@@ -922,18 +920,14 @@ go_here:
 		glActiveTextureARB(GL_TEXTURE1_ARB);			// turn off textureing for multi-texture layer 2 since it isnt needed anymore
 		glClientActiveTextureARB(GL_TEXTURE1_ARB);
 		glDisable(GL_TEXTURE_2D);
-#ifndef __ANDROID__
 		glDisable(GL_TEXTURE_GEN_S);
 		glDisable(GL_TEXTURE_GEN_T);
-#endif
 
 		glActiveTextureARB(GL_TEXTURE0_ARB);			// make sure #0 is active when we leave
 		glClientActiveTextureARB(GL_TEXTURE0_ARB);
 		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-#ifndef __ANDROID__
 		glDisable(GL_TEXTURE_GEN_S);
 		glDisable(GL_TEXTURE_GEN_T);
-#endif
 	}
 
 }

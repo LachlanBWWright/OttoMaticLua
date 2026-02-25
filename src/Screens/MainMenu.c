@@ -1138,6 +1138,14 @@ static Boolean DoMainMenuControl(void)
 				case	SELECT_PLAY:
 						gLevelNum = 0;							// start on Level 0 if not loading from saved game
 
+#ifdef __ANDROID__
+						{
+							int level = Android_ShowLevelSelectDialog();
+							if (level < 0)
+								break;							// user cancelled
+							gLevelNum = level;
+						}
+#else
 						if (GetKeyState(SDL_SCANCODE_F10) ||	// see if do Level cheat
 							(GetNeedState(kNeed_UIBack) && GetNeedState(kNeed_UIStart)))
 						{
@@ -1154,6 +1162,7 @@ static Boolean DoMainMenuControl(void)
 									gLevelNum = i;
 							}
 						}
+#endif
 
 						gPlayingFromSavedGame = false;
 						return(true);

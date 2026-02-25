@@ -2,7 +2,7 @@
 // On-screen virtual gamepad implementation
 // (c)2025 Otto Matic Android Port
 //
-// This file uses vertex arrays for OpenGL ES 1.1 compatibility
+// Virtual joystick + 4-button diamond layout
 
 #include "game.h"
 #include "touchcontrols.h"
@@ -21,39 +21,38 @@
 // Invalid finger ID sentinel value
 #define INVALID_FINGER_ID       ((SDL_FingerID)-1)
 
-// Button sizes and positions (relative to screen size)
-#define DPAD_SIZE               0.25f       // D-pad diameter as fraction of screen height
-#define DPAD_MARGIN             0.05f       // Margin from screen edge
-#define BUTTON_SIZE             0.10f       // Action button diameter
-#define BUTTON_MARGIN           0.03f       // Margin between buttons
-#define BUTTON_ALPHA            0.6f        // Default opacity
+// Joystick size and position (relative to screen height)
+#define JOYSTICK_RADIUS         0.15f       // Joystick radius as fraction of screen height (20% larger than old 0.125)
+#define JOYSTICK_CENTER_X       0.15f
+#define JOYSTICK_CENTER_Y       0.70f
 
-// D-pad dead zone
-#define DPAD_DEADZONE           0.15f
+// Joystick dead zone
+#define JOYSTICK_DEADZONE       0.15f
 
-// Button layout positions (as fractions of screen dimensions)
-// D-pad is on the left side
-#define DPAD_CENTER_X           0.15f
-#define DPAD_CENTER_Y           0.70f
+// Action button size
+#define BUTTON_SIZE             0.065f      // Button radius as fraction of screen height
 
-// Action buttons on the right side
-#define JUMP_BUTTON_X           0.88f
-#define JUMP_BUTTON_Y           0.60f
+// Diamond layout center on right side of screen
+#define DIAMOND_CENTER_X        0.85f
+#define DIAMOND_CENTER_Y        0.68f
+#define DIAMOND_SPACING         0.10f       // Distance from center to each button
 
-#define SHOOT_BUTTON_X          0.78f
-#define SHOOT_BUTTON_Y          0.70f
-
-#define PUNCH_BUTTON_X          0.88f
-#define PUNCH_BUTTON_Y          0.80f
-
-#define PREV_WEAPON_X           0.70f
-#define PREV_WEAPON_Y           0.15f
-
-#define NEXT_WEAPON_X           0.85f
-#define NEXT_WEAPON_Y           0.15f
-
+// Pause and debug buttons
 #define PAUSE_BUTTON_X          0.50f
 #define PAUSE_BUTTON_Y          0.05f
+
+#define DEBUG_BUTTON_X          0.95f
+#define DEBUG_BUTTON_Y          0.05f
+
+// Transparency
+#define BG_ALPHA                0.15f       // Very transparent background
+#define OUTLINE_ALPHA           0.4f        // Subtle outline
+#define ICON_ALPHA              0.45f       // Subtle icon
+#define PRESSED_ALPHA           0.6f        // More visible when pressed
+
+// Hit area multipliers (touch targets larger than visual size)
+#define BUTTON_HIT_MULTIPLIER   1.3f        // 30% larger than visual
+#define JOYSTICK_HIT_MULTIPLIER 1.5f        // 50% larger than visual
 
 // Maximum circle segments for drawing
 #define MAX_CIRCLE_SEGMENTS     32
@@ -78,7 +77,7 @@ typedef struct
 TouchControlState gTouchControls;
 
 static TouchButton gTouchButtons[NUM_TOUCH_BUTTONS];
-static SDL_FingerID gDpadFinger = INVALID_FINGER_ID;   // Track which finger is on the d-pad
+static SDL_FingerID gJoystickFinger = INVALID_FINGER_ID;
 static SDL_FingerID gButtonFingers[NUM_TOUCH_BUTTONS];
 
 static bool gTouchControlsInitialized = false;
@@ -96,15 +95,15 @@ static GLfloat gCircleVertices[(MAX_CIRCLE_SEGMENTS + 2) * 2];
 
 static void InitTouchButton(int buttonID, float x, float y, float radius, bool isRound);
 static int HitTestButtons(float touchX, float touchY);
-static void ProcessDpadTouch(float touchX, float touchY);
-static bool IsInDpadArea(float touchX, float touchY);
+static void ProcessJoystickTouch(float touchX, float touchY);
+static bool IsInJoystickArea(float touchX, float touchY);
 static void DrawFilledCircle(float cx, float cy, float r, int segments);
 static void DrawCircleOutline(float cx, float cy, float r, int segments);
 static void DrawTriangle(float x1, float y1, float x2, float y2, float x3, float y3);
 static void DrawQuad(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4);
 static void DrawLine(float x1, float y1, float x2, float y2);
-static void DrawDpad(float centerX, float centerY, float size, float alpha);
-static void DrawButton(const TouchButton* button, bool pressed, float alpha);
+static void DrawJoystick(float centerX, float centerY, float radius, float alpha);
+static void DrawActionButton(const TouchButton* button, bool pressed);
 
 /****************************/
 /*    IMPLEMENTATION        */
@@ -134,30 +133,31 @@ void TouchControls_Init(void)
     // Initialize state
     SDL_memset(&gTouchControls, 0, sizeof(gTouchControls));
     gTouchControls.visible = IsTouchDevice();
-    gTouchControls.opacity = BUTTON_ALPHA;
+    gTouchControls.opacity = 1.0f;
     gTouchControls.buttonScale = 1.0f;
     
     // Reset finger tracking
-    gDpadFinger = INVALID_FINGER_ID;
+    gJoystickFinger = INVALID_FINGER_ID;
     for (int i = 0; i < NUM_TOUCH_BUTTONS; i++)
     {
         gButtonFingers[i] = INVALID_FINGER_ID;
     }
 
-    // Initialize button positions
-    // D-pad buttons (virtual - used for hit testing)
-    InitTouchButton(TOUCH_BUTTON_DPAD_UP,    DPAD_CENTER_X, DPAD_CENTER_Y - DPAD_SIZE/3, DPAD_SIZE/4, false);
-    InitTouchButton(TOUCH_BUTTON_DPAD_DOWN,  DPAD_CENTER_X, DPAD_CENTER_Y + DPAD_SIZE/3, DPAD_SIZE/4, false);
-    InitTouchButton(TOUCH_BUTTON_DPAD_LEFT,  DPAD_CENTER_X - DPAD_SIZE/3, DPAD_CENTER_Y, DPAD_SIZE/4, false);
-    InitTouchButton(TOUCH_BUTTON_DPAD_RIGHT, DPAD_CENTER_X + DPAD_SIZE/3, DPAD_CENTER_Y, DPAD_SIZE/4, false);
+    // Virtual joystick d-pad entries (not drawn as individual buttons)
+    InitTouchButton(TOUCH_BUTTON_DPAD_UP,    JOYSTICK_CENTER_X, JOYSTICK_CENTER_Y - JOYSTICK_RADIUS/2, JOYSTICK_RADIUS/3, false);
+    InitTouchButton(TOUCH_BUTTON_DPAD_DOWN,  JOYSTICK_CENTER_X, JOYSTICK_CENTER_Y + JOYSTICK_RADIUS/2, JOYSTICK_RADIUS/3, false);
+    InitTouchButton(TOUCH_BUTTON_DPAD_LEFT,  JOYSTICK_CENTER_X - JOYSTICK_RADIUS/2, JOYSTICK_CENTER_Y, JOYSTICK_RADIUS/3, false);
+    InitTouchButton(TOUCH_BUTTON_DPAD_RIGHT, JOYSTICK_CENTER_X + JOYSTICK_RADIUS/2, JOYSTICK_CENTER_Y, JOYSTICK_RADIUS/3, false);
     
-    // Action buttons
-    InitTouchButton(TOUCH_BUTTON_JUMP,        JUMP_BUTTON_X,   JUMP_BUTTON_Y,   BUTTON_SIZE, true);
-    InitTouchButton(TOUCH_BUTTON_SHOOT,       SHOOT_BUTTON_X,  SHOOT_BUTTON_Y,  BUTTON_SIZE, true);
-    InitTouchButton(TOUCH_BUTTON_PUNCH_PICKUP, PUNCH_BUTTON_X, PUNCH_BUTTON_Y,  BUTTON_SIZE, true);
-    InitTouchButton(TOUCH_BUTTON_PREV_WEAPON, PREV_WEAPON_X,   PREV_WEAPON_Y,   BUTTON_SIZE * 0.7f, true);
-    InitTouchButton(TOUCH_BUTTON_NEXT_WEAPON, NEXT_WEAPON_X,   NEXT_WEAPON_Y,   BUTTON_SIZE * 0.7f, true);
-    InitTouchButton(TOUCH_BUTTON_PAUSE,       PAUSE_BUTTON_X,  PAUSE_BUTTON_Y,  BUTTON_SIZE * 0.6f, true);
+    // Diamond layout action buttons (right side of screen)
+    // Bottom = Jump, Right = Shoot, Top = Switch Weapon, Left = Interact
+    InitTouchButton(TOUCH_BUTTON_JUMP,           DIAMOND_CENTER_X, DIAMOND_CENTER_Y + DIAMOND_SPACING, BUTTON_SIZE, true);
+    InitTouchButton(TOUCH_BUTTON_SHOOT,          DIAMOND_CENTER_X + DIAMOND_SPACING, DIAMOND_CENTER_Y, BUTTON_SIZE, true);
+    InitTouchButton(TOUCH_BUTTON_PUNCH_PICKUP,   DIAMOND_CENTER_X - DIAMOND_SPACING, DIAMOND_CENTER_Y, BUTTON_SIZE, true);
+    InitTouchButton(TOUCH_BUTTON_SWITCH_WEAPON,  DIAMOND_CENTER_X, DIAMOND_CENTER_Y - DIAMOND_SPACING, BUTTON_SIZE, true);
+    
+    InitTouchButton(TOUCH_BUTTON_PAUSE,          PAUSE_BUTTON_X, PAUSE_BUTTON_Y, BUTTON_SIZE * 0.6f, true);
+    InitTouchButton(TOUCH_BUTTON_DEBUG_TOGGLE,   DEBUG_BUTTON_X, DEBUG_BUTTON_Y, BUTTON_SIZE * 0.5f, true);
 
     gTouchControlsInitialized = true;
     
@@ -184,7 +184,7 @@ static int HitTestButtons(float touchX, float touchY)
     // touchX and touchY are in normalized coordinates (0-1)
     float aspectRatio = (float)gTouchScreenWidth / (float)gTouchScreenHeight;
     
-    // Check action buttons (not d-pad)
+    // Check action buttons (not joystick d-pad entries)
     for (int i = TOUCH_BUTTON_JUMP; i < NUM_TOUCH_BUTTONS; i++)
     {
         TouchButton* btn = &gTouchButtons[i];
@@ -194,7 +194,7 @@ static int HitTestButtons(float touchX, float touchY)
         float dist = sqrtf(dx*dx + dy*dy);
         float scaledRadius = btn->radius * gTouchControls.buttonScale;
         
-        if (dist <= scaledRadius)
+        if (dist <= scaledRadius * BUTTON_HIT_MULTIPLIER)
         {
             return i;
         }
@@ -203,28 +203,28 @@ static int HitTestButtons(float touchX, float touchY)
     return TOUCH_BUTTON_NONE;
 }
 
-static bool IsInDpadArea(float touchX, float touchY)
+static bool IsInJoystickArea(float touchX, float touchY)
 {
     float aspectRatio = (float)gTouchScreenWidth / (float)gTouchScreenHeight;
-    float dx = (touchX - DPAD_CENTER_X) * aspectRatio;
-    float dy = touchY - DPAD_CENTER_Y;
+    float dx = (touchX - JOYSTICK_CENTER_X) * aspectRatio;
+    float dy = touchY - JOYSTICK_CENTER_Y;
     float dist = sqrtf(dx*dx + dy*dy);
-    float scaledSize = (DPAD_SIZE / 2.0f) * gTouchControls.buttonScale;
+    float scaledRadius = JOYSTICK_RADIUS * gTouchControls.buttonScale;
     
-    return dist <= scaledSize;
+    return dist <= scaledRadius * JOYSTICK_HIT_MULTIPLIER;
 }
 
-static void ProcessDpadTouch(float touchX, float touchY)
+static void ProcessJoystickTouch(float touchX, float touchY)
 {
-    // Convert touch position to d-pad direction
+    // Convert touch position to joystick direction
     float aspectRatio = (float)gTouchScreenWidth / (float)gTouchScreenHeight;
-    float dx = (touchX - DPAD_CENTER_X) * aspectRatio;
-    float dy = touchY - DPAD_CENTER_Y;
+    float dx = (touchX - JOYSTICK_CENTER_X) * aspectRatio;
+    float dy = touchY - JOYSTICK_CENTER_Y;
     
     float dist = sqrtf(dx*dx + dy*dy);
-    float scaledSize = (DPAD_SIZE / 2.0f) * gTouchControls.buttonScale;
+    float scaledRadius = JOYSTICK_RADIUS * gTouchControls.buttonScale;
     
-    if (dist < DPAD_DEADZONE * scaledSize)
+    if (dist < JOYSTICK_DEADZONE * scaledRadius)
     {
         // In dead zone - no movement
         gTouchControls.analogX = 0;
@@ -234,7 +234,7 @@ static void ProcessDpadTouch(float touchX, float touchY)
     }
     
     // Normalize and clamp
-    float normalizedDist = MinFloat(dist / scaledSize, 1.0f);
+    float normalizedDist = MinFloat(dist / scaledRadius, 1.0f);
     float angle = atan2f(dy, dx);
     
     gTouchControls.analogX = cosf(angle) * normalizedDist;
@@ -242,7 +242,6 @@ static void ProcessDpadTouch(float touchX, float touchY)
     gTouchControls.dpadActive = true;
     
     // Set discrete d-pad buttons based on direction
-    // Using 8-directional snapping
     float threshold = 0.3f;
     
     gTouchControls.isPressed[TOUCH_BUTTON_DPAD_UP]    = (gTouchControls.analogY < -threshold);
@@ -251,29 +250,49 @@ static void ProcessDpadTouch(float touchX, float touchY)
     gTouchControls.isPressed[TOUCH_BUTTON_DPAD_RIGHT] = (gTouchControls.analogX > threshold);
 }
 
-void TouchControls_Update(void)
+void TouchControls_BeginFrame(void)
 {
     if (!gTouchControlsInitialized || !gTouchControls.visible)
         return;
-    
-    // Update screen dimensions
-    gTouchScreenWidth = gGameWindowWidth;
-    gTouchScreenHeight = gGameWindowHeight;
-    
-    // Store previous state for edge detection
+
+    // Update screen dimensions before events are processed so HandleEvent
+    // uses the current aspect ratio for hit testing.  Query the window
+    // directly so that the values are always fresh, even before the first
+    // OGL_DrawScene call sets gGameWindowWidth/gGameWindowHeight.
+    if (gSDLWindow)
+    {
+        SDL_GetWindowSizeInPixels(gSDLWindow, &gTouchScreenWidth, &gTouchScreenHeight);
+    }
+    else if (gGameWindowWidth > 0 && gGameWindowHeight > 0)
+    {
+        gTouchScreenWidth = gGameWindowWidth;
+        gTouchScreenHeight = gGameWindowHeight;
+    }
+
+    // Store previous state for edge detection (must happen before events are processed)
     for (int i = 0; i < NUM_TOUCH_BUTTONS; i++)
     {
         gTouchControls.wasPressed[i] = gTouchControls.isPressed[i];
     }
-    
-    // Clear action button states (d-pad is handled separately)
+}
+
+void TouchControls_Update(void)
+{
+    if (!gTouchControlsInitialized || !gTouchControls.visible)
+        return;
+
+    // Sync screen dimensions for the upcoming Draw call
+    gTouchScreenWidth = gGameWindowWidth;
+    gTouchScreenHeight = gGameWindowHeight;
+
+    // Clear action button states (joystick is handled separately)
     for (int i = TOUCH_BUTTON_JUMP; i < NUM_TOUCH_BUTTONS; i++)
     {
         gTouchControls.isPressed[i] = false;
     }
     
-    // Clear d-pad state if no finger is tracking it
-    if (gDpadFinger == INVALID_FINGER_ID)
+    // Clear joystick state if no finger is tracking it
+    if (gJoystickFinger == INVALID_FINGER_ID)
     {
         gTouchControls.analogX = 0;
         gTouchControls.analogY = 0;
@@ -305,23 +324,28 @@ void TouchControls_Update(void)
                     float touchX = finger->x;
                     float touchY = finger->y;
                     
-                    // Check if this finger is in the d-pad area
-                    if (IsInDpadArea(touchX, touchY))
+                    // Check if this finger is in the joystick area
+                    if (IsInJoystickArea(touchX, touchY))
                     {
-                        if (gDpadFinger == INVALID_FINGER_ID || gDpadFinger == finger->id)
+                        if (gJoystickFinger == INVALID_FINGER_ID || gJoystickFinger == finger->id)
                         {
-                            gDpadFinger = finger->id;
-                            ProcessDpadTouch(touchX, touchY);
+                            gJoystickFinger = finger->id;
+                            ProcessJoystickTouch(touchX, touchY);
                         }
                     }
                     else
                     {
-                        // Check action buttons
-                        int buttonHit = HitTestButtons(touchX, touchY);
-                        if (buttonHit != TOUCH_BUTTON_NONE)
+                        // Only check action buttons for non-joystick fingers;
+                        // the joystick finger must never activate buttons even if
+                        // it drifts outside the joystick hit area.
+                        if (finger->id != gJoystickFinger)
                         {
-                            gTouchControls.isPressed[buttonHit] = true;
-                            gButtonFingers[buttonHit] = finger->id;
+                            int buttonHit = HitTestButtons(touchX, touchY);
+                            if (buttonHit != TOUCH_BUTTON_NONE)
+                            {
+                                gTouchControls.isPressed[buttonHit] = true;
+                                gButtonFingers[buttonHit] = finger->id;
+                            }
                         }
                     }
                 }
@@ -330,10 +354,18 @@ void TouchControls_Update(void)
         }
         SDL_free(touchDevices);
     }
+
+    // Handle debug toggle button (cycle through debug modes: 0=off, 1=fps, 2=all)
+    if (gTouchControls.isPressed[TOUCH_BUTTON_DEBUG_TOGGLE] &&
+        !gTouchControls.wasPressed[TOUCH_BUTTON_DEBUG_TOGGLE])
+    {
+        if (++gDebugMode > 2)
+            gDebugMode = 0;
+    }
 }
 
 //=============================================================================
-// Drawing functions using vertex arrays (OpenGL ES 1.1 compatible)
+// Drawing functions
 //=============================================================================
 
 static void DrawFilledCircle(float cx, float cy, float r, int segments)
@@ -434,43 +466,58 @@ void TouchControls_Draw(void)
     glPushMatrix();
     glLoadIdentity();
     
-    // Disable depth testing and enable blending
+    // Save and set GL state for clean rendering
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
+    glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(2.0f);
     
-    float alpha = gTouchControls.opacity;
-    float scale = gTouchControls.buttonScale;
+    // The 3D renderer may have left colour/normal/texcoord client arrays enabled.
+    // Disable them so every primitive below uses the solid colour set via glColor4f
+    // (or the GLES bridge equivalent) instead of stale per-vertex data from the
+    // last 3D draw call, which would produce unwanted gradients on the HUD circles.
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     
-    // Draw D-pad
-    float dpadX = DPAD_CENTER_X * gTouchScreenWidth;
-    float dpadY = DPAD_CENTER_Y * gTouchScreenHeight;
-    float dpadSize = DPAD_SIZE * gTouchScreenHeight * scale;
-    DrawDpad(dpadX, dpadY, dpadSize, alpha);
+    // Draw virtual joystick
+    float joyX = JOYSTICK_CENTER_X * gTouchScreenWidth;
+    float joyY = JOYSTICK_CENTER_Y * gTouchScreenHeight;
+    float joyR = JOYSTICK_RADIUS * gTouchScreenHeight * gTouchControls.buttonScale;
+    DrawJoystick(joyX, joyY, joyR, 1.0f);
     
-    // Draw action buttons
-    DrawButton(&gTouchButtons[TOUCH_BUTTON_JUMP], 
-               gTouchControls.isPressed[TOUCH_BUTTON_JUMP], alpha);
+    // Draw 4 action buttons in diamond layout
+    DrawActionButton(&gTouchButtons[TOUCH_BUTTON_JUMP],
+                     gTouchControls.isPressed[TOUCH_BUTTON_JUMP]);
     
-    DrawButton(&gTouchButtons[TOUCH_BUTTON_SHOOT],
-               gTouchControls.isPressed[TOUCH_BUTTON_SHOOT], alpha);
+    DrawActionButton(&gTouchButtons[TOUCH_BUTTON_SHOOT],
+                     gTouchControls.isPressed[TOUCH_BUTTON_SHOOT]);
     
-    DrawButton(&gTouchButtons[TOUCH_BUTTON_PUNCH_PICKUP],
-               gTouchControls.isPressed[TOUCH_BUTTON_PUNCH_PICKUP], alpha);
+    DrawActionButton(&gTouchButtons[TOUCH_BUTTON_PUNCH_PICKUP],
+                     gTouchControls.isPressed[TOUCH_BUTTON_PUNCH_PICKUP]);
     
-    DrawButton(&gTouchButtons[TOUCH_BUTTON_PREV_WEAPON],
-               gTouchControls.isPressed[TOUCH_BUTTON_PREV_WEAPON], alpha);
-    DrawButton(&gTouchButtons[TOUCH_BUTTON_NEXT_WEAPON],
-               gTouchControls.isPressed[TOUCH_BUTTON_NEXT_WEAPON], alpha);
+    DrawActionButton(&gTouchButtons[TOUCH_BUTTON_SWITCH_WEAPON],
+                     gTouchControls.isPressed[TOUCH_BUTTON_SWITCH_WEAPON]);
     
-    DrawButton(&gTouchButtons[TOUCH_BUTTON_PAUSE],
-               gTouchControls.isPressed[TOUCH_BUTTON_PAUSE], alpha);
+    // Pause button
+    DrawActionButton(&gTouchButtons[TOUCH_BUTTON_PAUSE],
+                     gTouchControls.isPressed[TOUCH_BUTTON_PAUSE]);
     
-    // Restore GL state
+    // Debug toggle button (extra subtle)
+    DrawActionButton(&gTouchButtons[TOUCH_BUTTON_DEBUG_TOGGLE],
+                     gTouchControls.isPressed[TOUCH_BUTTON_DEBUG_TOGGLE]);
+    
+    // Restore GL state fully so the next frame's 3D rendering is not affected
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_TEXTURE_2D);
+    OGL_EnableLighting();
+    glLineWidth(1.0f);
+    SetColor4f(1, 1, 1, 1);
     
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
@@ -478,151 +525,124 @@ void TouchControls_Draw(void)
     glPopMatrix();
 }
 
-static void DrawDpad(float centerX, float centerY, float size, float alpha)
+static void DrawJoystick(float centerX, float centerY, float radius, float alpha)
 {
-    float radius = size / 2.0f;
-    
-    // Draw outer circle (background)
-    glColor4f(0.2f, 0.2f, 0.2f, alpha * 0.5f);
+    // Outer ring background - very transparent
+    glColor4f(0.3f, 0.3f, 0.3f, BG_ALPHA * alpha);
     DrawFilledCircle(centerX, centerY, radius, 32);
     
-    // Draw outline
-    glLineWidth(2.0f);
-    glColor4f(0.8f, 0.8f, 0.8f, alpha);
+    // Outer ring outline
+    glColor4f(0.7f, 0.7f, 0.7f, OUTLINE_ALPHA * alpha);
     DrawCircleOutline(centerX, centerY, radius, 32);
     
-    // Draw cross/arrows
-    float arrowSize = radius * 0.3f;
-    float offset = radius * 0.5f;
+    // Thumb indicator
+    float thumbX = centerX + gTouchControls.analogX * radius * 0.6f;
+    float thumbY = centerY + gTouchControls.analogY * radius * 0.6f;
+    float thumbR = radius * 0.25f;
     
-    // Up arrow
-    bool upPressed = gTouchControls.isPressed[TOUCH_BUTTON_DPAD_UP];
-    glColor4f(upPressed ? 1.0f : 0.7f, upPressed ? 1.0f : 0.7f, upPressed ? 1.0f : 0.7f, alpha);
-    DrawTriangle(centerX, centerY - offset - arrowSize,
-                 centerX - arrowSize * 0.6f, centerY - offset + arrowSize * 0.5f,
-                 centerX + arrowSize * 0.6f, centerY - offset + arrowSize * 0.5f);
-    
-    // Down arrow
-    bool downPressed = gTouchControls.isPressed[TOUCH_BUTTON_DPAD_DOWN];
-    glColor4f(downPressed ? 1.0f : 0.7f, downPressed ? 1.0f : 0.7f, downPressed ? 1.0f : 0.7f, alpha);
-    DrawTriangle(centerX, centerY + offset + arrowSize,
-                 centerX - arrowSize * 0.6f, centerY + offset - arrowSize * 0.5f,
-                 centerX + arrowSize * 0.6f, centerY + offset - arrowSize * 0.5f);
-    
-    // Left arrow
-    bool leftPressed = gTouchControls.isPressed[TOUCH_BUTTON_DPAD_LEFT];
-    glColor4f(leftPressed ? 1.0f : 0.7f, leftPressed ? 1.0f : 0.7f, leftPressed ? 1.0f : 0.7f, alpha);
-    DrawTriangle(centerX - offset - arrowSize, centerY,
-                 centerX - offset + arrowSize * 0.5f, centerY - arrowSize * 0.6f,
-                 centerX - offset + arrowSize * 0.5f, centerY + arrowSize * 0.6f);
-    
-    // Right arrow
-    bool rightPressed = gTouchControls.isPressed[TOUCH_BUTTON_DPAD_RIGHT];
-    glColor4f(rightPressed ? 1.0f : 0.7f, rightPressed ? 1.0f : 0.7f, rightPressed ? 1.0f : 0.7f, alpha);
-    DrawTriangle(centerX + offset + arrowSize, centerY,
-                 centerX + offset - arrowSize * 0.5f, centerY - arrowSize * 0.6f,
-                 centerX + offset - arrowSize * 0.5f, centerY + arrowSize * 0.6f);
-    
-    // Draw analog position indicator if active
     if (gTouchControls.dpadActive)
     {
-        float indicatorX = centerX + gTouchControls.analogX * radius * 0.6f;
-        float indicatorY = centerY + gTouchControls.analogY * radius * 0.6f;
-        glColor4f(1.0f, 1.0f, 1.0f, alpha);
-        DrawFilledCircle(indicatorX, indicatorY, radius * 0.15f, 16);
+        // Active: slightly brighter thumb
+        glColor4f(0.5f, 0.5f, 0.5f, 0.35f * alpha);
+        DrawFilledCircle(thumbX, thumbY, thumbR, 16);
+        glColor4f(0.8f, 0.8f, 0.8f, OUTLINE_ALPHA * alpha);
+        DrawCircleOutline(thumbX, thumbY, thumbR, 16);
+    }
+    else
+    {
+        // Idle: centered thumb
+        glColor4f(0.4f, 0.4f, 0.4f, 0.25f * alpha);
+        DrawFilledCircle(centerX, centerY, thumbR, 16);
+        glColor4f(0.7f, 0.7f, 0.7f, OUTLINE_ALPHA * 0.7f * alpha);
+        DrawCircleOutline(centerX, centerY, thumbR, 16);
     }
 }
 
-static void DrawButton(const TouchButton* button, bool pressed, float alpha)
+static void DrawActionButton(const TouchButton* button, bool pressed)
 {
     float scale = gTouchControls.buttonScale;
     float cx = button->centerX * gTouchScreenWidth;
     float cy = button->centerY * gTouchScreenHeight;
     float r = button->radius * gTouchScreenHeight * scale;
     
-    // Set color based on button type
-    float baseR = 0.3f, baseG = 0.3f, baseB = 0.3f;
+    float bgAlpha = pressed ? 0.25f : BG_ALPHA;
+    float outAlpha = pressed ? PRESSED_ALPHA : OUTLINE_ALPHA;
+    float iconAlpha = pressed ? PRESSED_ALPHA : ICON_ALPHA;
     
-    switch (button->buttonID)
-    {
-        case TOUCH_BUTTON_JUMP:         baseR = 0.2f; baseG = 0.7f; baseB = 0.2f; break;  // Green
-        case TOUCH_BUTTON_SHOOT:        baseR = 0.2f; baseG = 0.4f; baseB = 0.8f; break;  // Blue
-        case TOUCH_BUTTON_PUNCH_PICKUP: baseR = 0.8f; baseG = 0.2f; baseB = 0.2f; break;  // Red
-        case TOUCH_BUTTON_PREV_WEAPON:
-        case TOUCH_BUTTON_NEXT_WEAPON:  baseR = 0.8f; baseG = 0.7f; baseB = 0.2f; break;  // Yellow
-        case TOUCH_BUTTON_PAUSE:        baseR = 0.5f; baseG = 0.5f; baseB = 0.5f; break;  // Gray
-    }
-    
-    if (pressed)
-    {
-        baseR = MinFloat(baseR * 1.5f, 1.0f);
-        baseG = MinFloat(baseG * 1.5f, 1.0f);
-        baseB = MinFloat(baseB * 1.5f, 1.0f);
-    }
-    
-    // Draw button background
-    glColor4f(baseR, baseG, baseB, alpha * 0.7f);
+    // All buttons: transparent gray background, white outline, white icon
+    glColor4f(0.3f, 0.3f, 0.3f, bgAlpha);
     DrawFilledCircle(cx, cy, r, 24);
     
-    // Draw button outline
-    glLineWidth(pressed ? 4.0f : 2.0f);
-    glColor4f(1.0f, 1.0f, 1.0f, alpha);
+    glLineWidth(2.0f);
+    glColor4f(0.8f, 0.8f, 0.8f, outAlpha);
     DrawCircleOutline(cx, cy, r, 24);
     
-    // Draw button label/icon
-    glColor4f(1.0f, 1.0f, 1.0f, alpha);
+    // Draw icon based on button type
     float iconSize = r * 0.5f;
+    glColor4f(0.9f, 0.9f, 0.9f, iconAlpha);
     
     switch (button->buttonID)
     {
         case TOUCH_BUTTON_JUMP:
-            // Draw up arrow
+            // Up arrow (jump)
             DrawTriangle(cx, cy - iconSize,
                          cx - iconSize * 0.7f, cy + iconSize * 0.5f,
                          cx + iconSize * 0.7f, cy + iconSize * 0.5f);
             break;
             
         case TOUCH_BUTTON_SHOOT:
-            // Draw crosshair
-            glLineWidth(3.0f);
+            // Crosshair (fire weapon)
+            glLineWidth(2.0f);
             DrawLine(cx - iconSize, cy, cx + iconSize, cy);
             DrawLine(cx, cy - iconSize, cx, cy + iconSize);
             DrawCircleOutline(cx, cy, iconSize * 0.5f, 12);
             break;
             
         case TOUCH_BUTTON_PUNCH_PICKUP:
-            // Draw fist/hand icon (simple box)
-            DrawQuad(cx - iconSize * 0.6f, cy - iconSize * 0.6f,
-                     cx + iconSize * 0.6f, cy - iconSize * 0.6f,
-                     cx + iconSize * 0.6f, cy + iconSize * 0.6f,
-                     cx - iconSize * 0.6f, cy + iconSize * 0.6f);
+            // Square (interact)
+            {
+                float hs = iconSize * 0.55f;
+                DrawQuad(cx - hs, cy - hs,
+                         cx + hs, cy - hs,
+                         cx + hs, cy + hs,
+                         cx - hs, cy + hs);
+            }
             break;
             
-        case TOUCH_BUTTON_PREV_WEAPON:
-            // Draw left arrow
-            DrawTriangle(cx - iconSize, cy,
-                         cx + iconSize * 0.3f, cy - iconSize * 0.7f,
-                         cx + iconSize * 0.3f, cy + iconSize * 0.7f);
-            break;
-            
-        case TOUCH_BUTTON_NEXT_WEAPON:
-            // Draw right arrow
-            DrawTriangle(cx + iconSize, cy,
-                         cx - iconSize * 0.3f, cy - iconSize * 0.7f,
-                         cx - iconSize * 0.3f, cy + iconSize * 0.7f);
+        case TOUCH_BUTTON_SWITCH_WEAPON:
+            // Double arrows (switch weapon - cycling arrows)
+            DrawTriangle(cx - iconSize * 0.5f, cy - iconSize * 0.1f,
+                         cx + iconSize * 0.5f, cy - iconSize * 0.1f,
+                         cx, cy - iconSize * 0.8f);
+            DrawTriangle(cx - iconSize * 0.5f, cy + iconSize * 0.1f,
+                         cx + iconSize * 0.5f, cy + iconSize * 0.1f,
+                         cx, cy + iconSize * 0.8f);
             break;
             
         case TOUCH_BUTTON_PAUSE:
-            // Draw pause bars
-            DrawQuad(cx - iconSize * 0.5f, cy - iconSize * 0.6f,
-                     cx - iconSize * 0.1f, cy - iconSize * 0.6f,
-                     cx - iconSize * 0.1f, cy + iconSize * 0.6f,
-                     cx - iconSize * 0.5f, cy + iconSize * 0.6f);
-            
-            DrawQuad(cx + iconSize * 0.1f, cy - iconSize * 0.6f,
-                     cx + iconSize * 0.5f, cy - iconSize * 0.6f,
-                     cx + iconSize * 0.5f, cy + iconSize * 0.6f,
-                     cx + iconSize * 0.1f, cy + iconSize * 0.6f);
+            // Pause bars
+            {
+                float bw = iconSize * 0.2f;
+                float bh = iconSize * 0.6f;
+                float gap = iconSize * 0.15f;
+                DrawQuad(cx - gap - bw, cy - bh,
+                         cx - gap, cy - bh,
+                         cx - gap, cy + bh,
+                         cx - gap - bw, cy + bh);
+                DrawQuad(cx + gap, cy - bh,
+                         cx + gap + bw, cy - bh,
+                         cx + gap + bw, cy + bh,
+                         cx + gap, cy + bh);
+            }
+            break;
+
+        case TOUCH_BUTTON_DEBUG_TOGGLE:
+            // Small "i" info icon
+            DrawFilledCircle(cx, cy - iconSize * 0.55f, iconSize * 0.15f, 8);
+            DrawQuad(cx - iconSize * 0.15f, cy - iconSize * 0.25f,
+                     cx + iconSize * 0.15f, cy - iconSize * 0.25f,
+                     cx + iconSize * 0.15f, cy + iconSize * 0.6f,
+                     cx - iconSize * 0.15f, cy + iconSize * 0.6f);
             break;
     }
 }
@@ -681,12 +701,12 @@ void TouchControls_HandleEvent(SDL_Event* event)
             float touchY = event->tfinger.y;
             SDL_FingerID fingerID = event->tfinger.fingerID;
             
-            if (IsInDpadArea(touchX, touchY))
+            if (IsInJoystickArea(touchX, touchY))
             {
-                if (gDpadFinger == INVALID_FINGER_ID)
+                if (gJoystickFinger == INVALID_FINGER_ID)
                 {
-                    gDpadFinger = fingerID;
-                    ProcessDpadTouch(touchX, touchY);
+                    gJoystickFinger = fingerID;
+                    ProcessJoystickTouch(touchX, touchY);
                 }
             }
             else
@@ -707,9 +727,9 @@ void TouchControls_HandleEvent(SDL_Event* event)
             float touchY = event->tfinger.y;
             SDL_FingerID fingerID = event->tfinger.fingerID;
             
-            if (fingerID == gDpadFinger)
+            if (fingerID == gJoystickFinger)
             {
-                ProcessDpadTouch(touchX, touchY);
+                ProcessJoystickTouch(touchX, touchY);
             }
             break;
         }
@@ -718,9 +738,9 @@ void TouchControls_HandleEvent(SDL_Event* event)
         {
             SDL_FingerID fingerID = event->tfinger.fingerID;
             
-            if (fingerID == gDpadFinger)
+            if (fingerID == gJoystickFinger)
             {
-                gDpadFinger = INVALID_FINGER_ID;
+                gJoystickFinger = INVALID_FINGER_ID;
                 gTouchControls.analogX = 0;
                 gTouchControls.analogY = 0;
                 gTouchControls.dpadActive = false;
