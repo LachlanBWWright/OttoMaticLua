@@ -5,6 +5,10 @@
 
 #include "game.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 
 /***************/
 /* EXTERNALS   */
@@ -38,6 +42,7 @@ static void DrawFenceNormals(short f);
 int				gNumFences = 0;
 int				gNumFencesDrawn;
 FenceDefType	*gFenceList = nil;
+Boolean			gFenceCollisionsEnabled = true;
 
 
 float			gFenceHeight[] =
@@ -550,6 +555,9 @@ double			radius;
 double			oldX,oldZ,newX,newZ;
 Boolean			hit = false;
 
+	if (!gFenceCollisionsEnabled)					// bail if fence collisions are disabled
+		return false;
+
 			/* CALC MY MOTION LINE SEGMENT */
 
 	oldX = theNode->OldCoord.x;						// from old coord
@@ -853,3 +861,19 @@ Boolean			intersected;
 
 
 
+
+
+/******************** SET FENCE COLLISIONS ENABLED ***************************/
+//
+// External command interface: enable or disable fence collision detection.
+// This can be called from JavaScript in the WebAssembly build via ccall/cwrap,
+// or from C code in other builds.
+//
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+void OttoMatic_SetFenceCollisions(int enabled)
+{
+	gFenceCollisionsEnabled = (Boolean)(enabled != 0);
+}

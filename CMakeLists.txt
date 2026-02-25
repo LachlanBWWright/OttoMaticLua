@@ -79,8 +79,11 @@ if(NOT DEFINED SDL3_DIR)
 endif()
 
 if(NOT BUILD_SDL_FROM_SOURCE)
-	find_package(SDL3 CONFIG REQUIRED)
-	message("Found pre-built SDL3")
+	if(NOT TARGET SDL3::SDL3)
+		# Only search for pre-built SDL3 if it hasn't already been added (e.g., as a subdirectory)
+		find_package(SDL3 CONFIG REQUIRED)
+	endif()
+	message("Found/using pre-built SDL3")
 else()
 	if(NOT DEFINED SDL3_DIR)
 		set(SDL3_DIR "${CMAKE_SOURCE_DIR}/extern/SDL")
@@ -95,7 +98,9 @@ endif()
 
 add_subdirectory(extern/Pomme)
 
-find_package(OpenGL REQUIRED)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+	find_package(OpenGL REQUIRED)
+endif()
 
 #------------------------------------------------------------------------------
 # EXECUTABLE TARGET
@@ -119,9 +124,36 @@ elseif(APPLE)
 	set_source_files_properties(${CMAKE_SOURCE_DIR}/packaging/${GAME_TARGET}.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 endif()
 
-add_executable(${GAME_TARGET} ${GAME_SOURCES})
+# Android requires a shared library; all other platforms use an executable
+if(ANDROID)
+	add_library(${GAME_TARGET} SHARED ${GAME_SOURCES})
+else()
+	add_executable(${GAME_TARGET} ${GAME_SOURCES})
+endif()
 
 target_include_directories(${GAME_TARGET} PRIVATE ${GAME_SRCDIR}/Headers)
+
+if(EMSCRIPTEN)
+	# Output an HTML page that wraps the WebAssembly module
+	set_target_properties(${GAME_TARGET} PROPERTIES SUFFIX ".html")
+
+	# Emscripten link flags for the WebAssembly build:
+	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
+	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
+	#   preload-file          - embed the Data/ folder into the virtual filesystem
+	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
+	target_link_options(${GAME_TARGET} PRIVATE
+		"SHELL:-sASYNCIFY=1"
+		"SHELL:-sLEGACY_GL_EMULATION=1"
+		"SHELL:-sGL_UNSAFE_OPTS=0"
+		"SHELL:-sALLOW_MEMORY_GROWTH=1"
+		"SHELL:-sINITIAL_MEMORY=268435456"
+		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
+		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath']"
+		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+		"SHELL:--shell-file ${CMAKE_SOURCE_DIR}/docs/shell.html"
+	)
+endif()
 
 #------------------------------------------------------------------------------
 # COMPILER/LINKER OPTIONS
@@ -198,7 +230,7 @@ if(SANITIZE)
 endif()
 
 # Explicitly link math lib on Linux
-if(NOT APPLE AND NOT WIN32)
+if(NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT ANDROID)
 	target_link_libraries(${GAME_TARGET} PRIVATE m)
 endif()
 
@@ -210,7 +242,17 @@ else()
 endif()
 
 # Link core dependencies
-target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+# OpenGL not needed for Emscripten (WebGL via -sLEGACY_GL_EMULATION) or Android (OpenGL ES via SDL)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+else()
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme)
+endif()
+
+# On Android, link OpenGL ES
+if(ANDROID)
+	target_link_libraries(${GAME_TARGET} PRIVATE GLESv2 EGL)
+endif()
 
 # Add required frameworks for KillMacMouseAcceleration
 if(APPLE)
@@ -277,14 +319,20 @@ set_target_properties(${GAME_TARGET} PROPERTIES
 # POST-BUILD (COPY ASSETS, ETC.)
 #------------------------------------------------------------------------------
 
-if(APPLE)
+if(EMSCRIPTEN)
+	# For Emscripten, data is embedded via --preload-file; no extra copy step needed
+elseif(ANDROID)
+	# For Android, game data is packaged as assets by Gradle; no extra copy step needed
+elseif(APPLE)
 	set(GAME_DATA_TARGET_LOCATION "$<TARGET_FILE_DIR:${GAME_TARGET}>/../Resources")
 else()
 	set(GAME_DATA_TARGET_LOCATION "$<TARGET_FILE_DIR:${GAME_TARGET}>/Data")
 endif()
 
-add_custom_command(TARGET ${GAME_TARGET} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_directory "${GAME_DATADIR}" "${GAME_DATA_TARGET_LOCATION}")
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+	add_custom_command(TARGET ${GAME_TARGET} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory "${GAME_DATADIR}" "${GAME_DATA_TARGET_LOCATION}")
+endif()
 
 if(APPLE)
 	set(INFO_PLIST "${GAME_DATA_TARGET_LOCATION}/../Info.plist")
@@ -310,5 +358,7 @@ if(WIN32)
 	include(InstallRequiredSystemLibraries)
 endif()
 
-# Copy documentation to output folder
-configure_file(${CMAKE_SOURCE_DIR}/packaging/ReadMe.txt.in ${CMAKE_CURRENT_BINARY_DIR}/ReadMe.txt)
+# Copy documentation to output folder (not needed for Android - distributed via APK assets)
+if(NOT ANDROID)
+	configure_file(${CMAKE_SOURCE_DIR}/packaging/ReadMe.txt.in ${CMAKE_CURRENT_BINARY_DIR}/ReadMe.txt)
+endif()

@@ -1,30 +1,57 @@
 name: Full Compile Check
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+      - main
 
 jobs:
   full-compile-check:
     name: ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.os }}
-    timeout-minutes: 5
+    timeout-minutes: 20
 
     strategy:
       fail-fast: false
       matrix:
         platform:
-          - { name: Linux/GCC, os: ubuntu-latest, extraflags: "--system-sdl" }
-          - { name: Linux/Clang, os: ubuntu-latest, extraflags: "--system-sdl", prefix: "CC=clang CXX=clang++"}
+          - { name: Linux/GCC,      os: ubuntu-22.04 }
+          - { name: Linux/Clang,    os: ubuntu-22.04, prefix: "CC=clang CXX=clang++" }
           - { name: Windows/VS2022, os: windows-2022, extraflags: "-G 'Visual Studio 17 2022'" }
-          - { name: Mac, os: macos-latest }
+          - { name: Mac,            os: macos-latest }
 
     steps:
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt update
-          sudo apt install libsdl3-dev
-
       - uses: actions/checkout@v4
         with: {submodules: 'recursive'}
-          
-      - run: ${{matrix.platform.prefix}} python3 build.py --dependencies --configure --build ${{matrix.platform.extraflags}}
+
+      # SDL3 is not in Ubuntu's apt repos — install the libs needed to build it from source
+      - name: Install Linux SDL3 build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            libasound2-dev libpulse-dev \
+            libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+            libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev \
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+            libpipewire-0.3-dev libwayland-dev
+
+      # Cache the compiled SDL3 install tree so subsequent runs skip the ~2 min SDL3 build
+      - name: Cache SDL3 install (Linux)
+        id: cache-sdl3
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: extern/SDL3-3.2.4/install
+          key: sdl3-3.2.4-ubuntu-22.04-${{ runner.arch }}
+
+      # Build SDL3 from source only on cache miss (Linux) or on all other platforms
+      - name: Build dependencies
+        if: runner.os != 'Linux' || steps.cache-sdl3.outputs.cache-hit != 'true'
+        run: ${{matrix.platform.prefix}} python3 build.py --dependencies ${{matrix.platform.extraflags}}
+
+      - name: Configure and build
+        run: ${{matrix.platform.prefix}} python3 build.py --configure --build ${{matrix.platform.extraflags}}

@@ -1,11 +1,15 @@
 name: Make Release Builds
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build-linux-appimage:
     runs-on: ${{ matrix.platform.os }}
-    timeout-minutes: 5
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +44,7 @@ jobs:
 
   build-windows:
     runs-on: windows-2022
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with: {submodules: 'recursive'}
@@ -86,3 +90,131 @@ jobs:
           name: ${{env.ARTIFACT_NAME}}
           path: dist/
           compression-level: 0
+
+  build-wasm:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive'}
+      - name: Install Emscripten (emsdk)
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+          actions-cache-folder: .emsdk-cache
+      - name: Cache SDL3 source (WASM build)
+        uses: actions/cache@v4
+        with:
+          path: extern/SDL3-3.2.4
+          key: sdl3-wasm-3.2.4-${{ runner.arch }}
+      - name: Get artifact name
+        run: echo "ARTIFACT_NAME=$(python3 build.py --wasm --print-artifact-name)" >> $GITHUB_ENV
+      - run: python3 build.py --wasm --dependencies
+      - run: python3 build.py --wasm --configure
+      - run: python3 build.py --wasm --build
+      - run: python3 build.py --wasm --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{env.ARTIFACT_NAME}}
+          path: dist/
+          compression-level: 0
+
+  build-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive'}
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install Android NDK
+        # Android SDK is pre-installed on ubuntu-22.04 at $ANDROID_SDK_ROOT; just install the NDK
+        run: sdkmanager "ndk;27.2.12479018"
+      - name: Download SDL3 source
+        run: |
+          SDL_VER=$(python3 -c "import re; m=re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          mkdir -p extern/SDL3-src
+          curl -fsSL "https://libsdl.org/release/SDL3-${SDL_VER}.tar.gz" | tar -xz --strip-components=1 -C extern/SDL3-src
+      - name: Build Android APK via SDL3 Android project template
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
+        run: |
+          SDL_VER=$(python3 -c "import re; m=re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          GAME_VER=$(python3 -c "import re; m=re.search(r'#define\s+GAME_VERSION\s+\"([^\"]+)\"', open('src/Headers/version.h').read()); print(m.group(1))")
+
+          # Use SDL3's bundled Android project as the build scaffold
+          cp -r extern/SDL3-src/android-project android-build
+
+          # Point app/jni/SDL at the SDL3 source tree (built as subdirectory by jni/CMakeLists.txt)
+          ln -s "$(pwd)/extern/SDL3-src" android-build/app/jni/SDL
+
+          # Copy game source into app/jni/src/ so that GAME_SRCDIR = app/jni/src (CMAKE_SOURCE_DIR = app/jni/)
+          rsync -a src/ android-build/app/jni/src/
+
+          # Copy Pomme submodule into app/jni/extern/Pomme/ (CMakeLists.txt does add_subdirectory(extern/Pomme))
+          rsync -a extern/Pomme/ android-build/app/jni/extern/Pomme/
+
+          # Place the game CMakeLists.txt as app/jni/src/CMakeLists.txt (SDL template calls add_subdirectory(src))
+          cp CMakeLists.txt android-build/app/jni/src/CMakeLists.txt
+
+          # Copy game data as Android assets
+          mkdir -p android-build/app/src/main/assets
+          cp -r Data android-build/app/src/main/assets/
+
+          cd android-build
+          chmod +x gradlew
+          ./gradlew assembleDebug -PBUILD_WITH_CMAKE=true
+
+          mkdir -p ../dist
+          find . -name "*.apk" -exec cp {} "../dist/OttoMatic-${GAME_VER}-android.apk" \;
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OttoMatic-android
+          path: dist/*.apk
+          compression-level: 0
+
+  publish-release:
+    needs: [build-wasm, build-android]
+    runs-on: ubuntu-22.04
+    # Only publish releases on push to main (not on manual workflow_dispatch)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-wasm*"
+          path: release-artifacts
+          merge-multiple: true
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: OttoMatic-android
+          path: release-artifacts
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GAME_VER=$(python3 -c "import re; m=re.search(r'#define\s+GAME_VERSION\s+\"([^\"]+)\"', open('src/Headers/version.h').read()); print(m.group(1))")
+          TAG="v${GAME_VER}-wasm-android"
+          echo "Automated WebAssembly and Android release." > release-notes.md
+          echo "" >> release-notes.md
+          echo "Serve wasm zip from a web server to play in the browser." >> release-notes.md
+          echo "Install the APK on Android (enable Unknown Sources in settings)." >> release-notes.md
+          echo "" >> release-notes.md
+          echo "Level editor: use --level N to load a level directly, --terrain PATH to override terrain." >> release-notes.md
+          echo "" >> release-notes.md
+          echo "WASM JS API: OttoMatic_SetFenceCollisions(0/1) toggles fence collisions." >> release-notes.md
+          echo "             OttoMatic_SetTerrainPath(path) overrides the terrain file." >> release-notes.md
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git push origin --delete "refs/tags/$TAG" 2>/dev/null || true
+          gh release create "$TAG" \
+            --title "Otto Matic ${GAME_VER} - WebAssembly & Android" \
+            --notes-file release-notes.md \
+            release-artifacts/*.zip release-artifacts/*.apk

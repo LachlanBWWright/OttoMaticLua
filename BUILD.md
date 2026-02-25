@@ -10,6 +10,14 @@ cd OttoMatic
 python3 build.py
 ```
 
+To build the **WebAssembly** (browser) version, install [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) and run:
+
+```
+python3 build.py --wasm
+```
+
+The WASM bundle will be produced in `dist/OttoMatic-<version>-wasm.zip`. Extract and serve from a web server.
+
 If you want to build the game **manually** instead, the rest of this document describes how to do just that on each of the big 3 desktop operating systems.
 
 ## How to build the game manually on macOS
@@ -59,8 +67,22 @@ If you want to build the game **manually** instead, the rest of this document de
 1. Install the prerequisites from your package manager:
     - Any C++20 compiler
     - CMake 3.21+
-    - SDL3 development library (e.g. "libsdl3-dev" on Ubuntu, "sdl3" on Arch, "SDL3-devel" on Fedora)
-    - OpenGL development libraries (e.g. "libgl1-mesa-dev" on Ubuntu)
+    - SDL3 build dependencies (see below — SDL3 itself is downloaded automatically by `build.py`)
+    - OpenGL development libraries (e.g. `libgl1-mesa-dev` on Ubuntu)
+
+    On Ubuntu/Debian install the SDL3 build dependencies:
+    ```
+    sudo apt-get install libasound2-dev libpulse-dev \
+      libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+      libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev \
+      libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+      libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+      libpipewire-0.3-dev libwayland-dev
+    ```
+
+    > **Note:** `libsdl3-dev` is **not** available in Ubuntu/Debian apt repos yet.
+    > The build script (`build.py`) automatically downloads and compiles SDL3 from source.
+    > Use `--system-sdl` only if you have installed SDL3 from another source.
 1. Clone the repo **recursively**:
     ```
     git clone --recurse-submodules https://github.com/jorio/OttoMatic
@@ -73,3 +95,76 @@ If you want to build the game **manually** instead, the rest of this document de
     ```
     If you'd like to enable runtime sanitizers, append `-DSANITIZE=1` to the **first** `cmake` call above.
 1. The game gets built in `build/OttoMatic`. Enjoy!
+
+## How to build the WebAssembly version manually
+
+1. Install the prerequisites:
+    - [Emscripten SDK (emsdk)](https://emscripten.org/docs/getting_started/downloads.html) and activate it
+    - CMake 3.21+
+1. Clone the repo **recursively**:
+    ```
+    git clone --recurse-submodules https://github.com/jorio/OttoMatic
+    cd OttoMatic
+    ```
+1. Download SDL3 source and unpack it into `extern/SDL3-3.2.4`:
+    ```
+    curl -LO https://libsdl.org/release/SDL3-3.2.4.tar.gz
+    tar -xzf SDL3-3.2.4.tar.gz -C extern/
+    ```
+1. Configure with Emscripten (note: the build script uses `build/` as the output dir):
+    ```
+    emcmake cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SDL_FROM_SOURCE=ON \
+        -DSDL_STATIC=ON \
+        -DSDL3_DIR=extern/SDL3-3.2.4
+    ```
+1. Build:
+    ```
+    cmake --build build -j$(nproc)
+    ```
+1. The output is `build/OttoMatic.html` (plus `.js`, `.wasm`, `.data`). Serve these files from a web server to play.
+
+## GitHub Pages (live WASM demo)
+
+The CI/CD pipeline automatically builds and deploys the WebAssembly version to GitHub Pages whenever a commit is pushed to the `main` branch. The workflow is defined in `.github/workflows/deploy-pages.yml`.
+
+To enable GitHub Pages in your fork:
+1. Go to **Settings → Pages** in your repository.
+2. Set **Source** to **GitHub Actions**.
+3. Push a commit to `main` — the `Deploy to GitHub Pages` workflow will run and your game will be live at `https://<your-username>.github.io/<repo-name>/`.
+
+The deployed page (`docs/shell.html`) provides:
+- A loading screen with progress indicator
+- The game canvas (WebGL)
+- A **Level Editor API** panel with live controls:
+  - Fence collision toggle
+  - Terrain file path override
+  - URL-param support: `?level=N&terrain=/Data/Terrain/Custom.ter`
+
+## Level editor integration
+
+The game supports direct level loading and terrain file override for integration with level editors:
+
+### Command-line arguments (desktop and WASM via `Module.arguments`)
+
+- `--level N` — Skip the main menu and load level N directly (0 = Farm, 1 = Blob, etc.)
+- `--terrain PATH` — Override the terrain file for the current level with a custom `.ter` file
+
+### JavaScript API (WebAssembly only)
+
+After the WASM module is initialized, you can call these exported functions from JavaScript:
+
+```js
+// Disable fence collision detection (useful for level editing/walkthrough)
+Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'], [0]);
+
+// Re-enable fence collision detection
+Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'], [1]);
+
+// Override the terrain file for the current level
+// (write the .ter file to the virtual filesystem first)
+FS.writeFile('/Data/Terrain/custom.ter', yourTerrainData);
+Module.ccall('OttoMatic_SetTerrainPath', null, ['string'], ['/Data/Terrain/custom.ter']);
+```
+

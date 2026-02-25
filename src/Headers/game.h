@@ -118,6 +118,13 @@ extern	FenceDefType			*gFenceList;
 extern	HighScoreType			gHighScores[];
 extern	MOMaterialObject		*gMostRecentMaterial;
 extern	MOMaterialObject		*gSuperTileTextureObjects[MAX_SUPERTILE_TEXTURES];
+
+		/* LEVEL EDITOR / WASM INTERFACE */
+
+extern	int						gDirectLevelNum;		// -1 = use default game flow; >=0 = jump directly to this level
+extern	char					gTerrainOverridePath[512];	// empty string = use built-in; otherwise path overrides terrain file for current level
+
+FSSpec* GetTerrainOverrideSpec(void);
 extern	MOVertexArrayData		**gLocalTriMeshesOfSkelType;
 extern	MetaObjectPtr			gBG3DGroupList[MAX_BG3D_GROUPS][MAX_OBJECTS_IN_GROUP];
 extern	NewObjectDefinitionType	gNewObjectDefinition;
