@@ -67,8 +67,22 @@ If you want to build the game **manually** instead, the rest of this document de
 1. Install the prerequisites from your package manager:
     - Any C++20 compiler
     - CMake 3.21+
-    - SDL3 development library (e.g. "libsdl3-dev" on Ubuntu, "sdl3" on Arch, "SDL3-devel" on Fedora)
-    - OpenGL development libraries (e.g. "libgl1-mesa-dev" on Ubuntu)
+    - SDL3 build dependencies (see below — SDL3 itself is downloaded automatically by `build.py`)
+    - OpenGL development libraries (e.g. `libgl1-mesa-dev` on Ubuntu)
+
+    On Ubuntu/Debian install the SDL3 build dependencies:
+    ```
+    sudo apt-get install libasound2-dev libpulse-dev \
+      libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+      libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev \
+      libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+      libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+      libpipewire-0.3-dev libwayland-dev
+    ```
+
+    > **Note:** `libsdl3-dev` is **not** available in Ubuntu/Debian apt repos yet.
+    > The build script (`build.py`) automatically downloads and compiles SDL3 from source.
+    > Use `--system-sdl` only if you have installed SDL3 from another source.
 1. Clone the repo **recursively**:
     ```
     git clone --recurse-submodules https://github.com/jorio/OttoMatic
@@ -97,9 +111,9 @@ If you want to build the game **manually** instead, the rest of this document de
     curl -LO https://libsdl.org/release/SDL3-3.2.4.tar.gz
     tar -xzf SDL3-3.2.4.tar.gz -C extern/
     ```
-1. Configure with Emscripten:
+1. Configure with Emscripten (note: the build script uses `build/` as the output dir):
     ```
-    emcmake cmake -S . -B build-wasm \
+    emcmake cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SDL_FROM_SOURCE=ON \
         -DSDL_STATIC=ON \
@@ -107,9 +121,26 @@ If you want to build the game **manually** instead, the rest of this document de
     ```
 1. Build:
     ```
-    cmake --build build-wasm -j$(nproc)
+    cmake --build build -j$(nproc)
     ```
-1. The output is `build-wasm/OttoMatic.html` (plus `.js`, `.wasm`, `.data`). Serve these files from a web server to play.
+1. The output is `build/OttoMatic.html` (plus `.js`, `.wasm`, `.data`). Serve these files from a web server to play.
+
+## GitHub Pages (live WASM demo)
+
+The CI/CD pipeline automatically builds and deploys the WebAssembly version to GitHub Pages whenever a commit is pushed to the `main` branch. The workflow is defined in `.github/workflows/deploy-pages.yml`.
+
+To enable GitHub Pages in your fork:
+1. Go to **Settings → Pages** in your repository.
+2. Set **Source** to **GitHub Actions**.
+3. Push a commit to `main` — the `Deploy to GitHub Pages` workflow will run and your game will be live at `https://<your-username>.github.io/<repo-name>/`.
+
+The deployed page (`docs/shell.html`) provides:
+- A loading screen with progress indicator
+- The game canvas (WebGL)
+- A **Level Editor API** panel with live controls:
+  - Fence collision toggle
+  - Terrain file path override
+  - URL-param support: `?level=N&terrain=/Data/Terrain/Custom.ter`
 
 ## Level editor integration
 
