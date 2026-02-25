@@ -124,11 +124,7 @@ extern	MOMaterialObject		*gSuperTileTextureObjects[MAX_SUPERTILE_TEXTURES];
 extern	int						gDirectLevelNum;		// -1 = use default game flow; >=0 = jump directly to this level
 extern	char					gTerrainOverridePath[512];	// empty string = use built-in; otherwise path overrides terrain file for current level
 
-#ifdef __cplusplus
 FSSpec* GetTerrainOverrideSpec(void);
-#else
-extern FSSpec* GetTerrainOverrideSpec(void);
-#endif
 extern	MOVertexArrayData		**gLocalTriMeshesOfSkelType;
 extern	MetaObjectPtr			gBG3DGroupList[MAX_BG3D_GROUPS][MAX_OBJECTS_IN_GROUP];
 extern	NewObjectDefinitionType	gNewObjectDefinition;

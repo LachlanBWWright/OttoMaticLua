@@ -875,5 +875,5 @@ EMSCRIPTEN_KEEPALIVE
 #endif
 void OttoMatic_SetFenceCollisions(int enabled)
 {
-gFenceCollisionsEnabled = (Boolean)(enabled != 0);
+	gFenceCollisionsEnabled = (Boolean)(enabled != 0);
 }
