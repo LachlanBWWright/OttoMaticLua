@@ -171,6 +171,9 @@ retryVideo:
 #ifdef __EMSCRIPTEN__
 	// WebAssembly: use OpenGL ES 2 (maps to WebGL 1)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#elif defined(__ANDROID__)
+	// Android: use OpenGL ES 2
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 #else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 #endif
