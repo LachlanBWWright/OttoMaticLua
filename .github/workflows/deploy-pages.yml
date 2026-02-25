@@ -1,0 +1,88 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Required for OIDC-based Pages deployment
+permissions:
+  contents: read
+  pages:    write
+  id-token: write
+
+# Only one deployment at a time; cancel any in-progress run for the same branch
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive'}
+
+      # Configure the GitHub Pages environment (sets base URL etc.)
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # Install Emscripten SDK
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+          actions-cache-folder: .emsdk-cache
+
+      # SDL3 is compiled as part of the WASM build; cache it to save ~2 min per run
+      - name: Cache SDL3 source (WASM build)
+        uses: actions/cache@v4
+        with:
+          path: extern/SDL3-3.2.4
+          key: sdl3-wasm-3.2.4-${{ runner.arch }}
+
+      # Build WebAssembly with Emscripten
+      - name: Download SDL3 source
+        run: python3 build.py --wasm --dependencies
+
+      - name: Configure WASM build
+        run: python3 build.py --wasm --configure
+
+      - name: Build WASM
+        run: python3 build.py --wasm --build
+
+      # Assemble the GitHub Pages site in _site/
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+
+          # Static assets from docs/ (logo used by the shell page, PDFs, etc.)
+          cp docs/logo.png       _site/logo.png 2>/dev/null || true
+          cp docs/screenshot.webp _site/screenshot.webp 2>/dev/null || true
+
+          # WASM build output — rename the HTML entrypoint to index.html
+          cp build/OttoMatic.html _site/index.html
+          cp build/OttoMatic.js   _site/OttoMatic.js
+          cp build/OttoMatic.wasm _site/OttoMatic.wasm
+
+          # The .data file (preloaded game assets) may be very large (~200 MB);
+          # copy it only if it exists (build might inline it instead)
+          [ -f build/OttoMatic.data ] && cp build/OttoMatic.data _site/OttoMatic.data || true
+
+          echo "Site contents:"
+          ls -lh _site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

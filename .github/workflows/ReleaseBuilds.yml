@@ -9,7 +9,7 @@ on:
 jobs:
   build-linux-appimage:
     runs-on: ${{ matrix.platform.os }}
-    timeout-minutes: 5
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +44,7 @@ jobs:
 
   build-windows:
     runs-on: windows-2022
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with: {submodules: 'recursive'}
@@ -101,10 +101,12 @@ jobs:
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: latest
-      - name: Install CMake
-        run: |
-          sudo apt update
-          sudo apt install -y cmake
+          actions-cache-folder: .emsdk-cache
+      - name: Cache SDL3 source (WASM build)
+        uses: actions/cache@v4
+        with:
+          path: extern/SDL3-3.2.4
+          key: sdl3-wasm-3.2.4-${{ runner.arch }}
       - name: Get artifact name
         run: echo "ARTIFACT_NAME=$(python3 build.py --wasm --print-artifact-name)" >> $GITHUB_ENV
       - run: python3 build.py --wasm --dependencies

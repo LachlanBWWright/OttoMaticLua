@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Otto Matic — WebAssembly</title>
+  <style>
+    :root {
+      --accent: #4fc3f7;
+      --bg:     #07070f;
+      --panel:  #10102a;
+      --border: #1e1e3a;
+      --text:   #d8d8e8;
+      --dim:    #6a6a8a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    #header {
+      text-align: center;
+      padding: 1.25rem 1rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    #header h1 {
+      font-size: 2rem;
+      color: var(--accent);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    #header p { color: var(--dim); font-size: 0.85rem; margin-top: 0.25rem; }
+
+    /* ── Game area ───────────────────────────────────────── */
+    #game-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+
+    /* Loading card — hidden once game starts */
+    #loading-card {
+      width: 100%;
+      max-width: 800px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2rem 1.5rem;
+      text-align: center;
+    }
+    #loading-card img {
+      max-width: 280px;
+      width: 100%;
+      margin-bottom: 1.25rem;
+      /* Hide broken-image if logo.png is absent */
+    }
+    #loading-card img[src=""][alt]::after { content: attr(alt); display: block; }
+    #status-text {
+      font-size: 1.05rem;
+      color: var(--accent);
+      min-height: 1.6rem;
+    }
+    #progress-bar {
+      width: 100%;
+      max-width: 420px;
+      height: 6px;
+      margin: 0.75rem auto 0.35rem;
+      accent-color: var(--accent);
+    }
+    #progress-label { font-size: 0.78rem; color: var(--dim); }
+
+    /* Canvas — hidden until loading complete */
+    #canvas {
+      display: none;
+      max-width: 100%;
+      border-radius: 6px;
+      outline: none;
+    }
+
+    /* Toolbar below canvas */
+    #toolbar {
+      display: none;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* ── Generic button ──────────────────────────────────── */
+    .btn {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.35rem 0.8rem;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .btn:hover  { background: #1a1a3a; border-color: var(--accent); }
+    .btn.on     { background: #0d2a40; border-color: var(--accent); color: var(--accent); }
+    .btn.danger { border-color: #c04040; color: #e06060; }
+    .btn.danger:hover { background: #2a0d0d; }
+
+    /* ── API / docs panel ────────────────────────────────── */
+    #api-panel {
+      width: 100%;
+      max-width: 800px;
+      margin: 0.5rem auto 1.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+    }
+    #api-panel h2 {
+      color: var(--accent);
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    #api-panel .sub {
+      color: var(--dim);
+      font-size: 0.82rem;
+      margin-bottom: 1rem;
+    }
+
+    .api-section { margin-bottom: 1.1rem; }
+    .api-section h3 {
+      font-size: 0.88rem;
+      color: #9090b0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.3rem;
+      margin-bottom: 0.6rem;
+    }
+    .api-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.45rem 0;
+      flex-wrap: wrap;
+    }
+    .api-row label {
+      min-width: 160px;
+      font-size: 0.88rem;
+      color: #b0b0c8;
+    }
+    input[type="text"] {
+      flex: 1;
+      min-width: 200px;
+      background: #0a0a1a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.3rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    code {
+      background: #0a0a1a;
+      border: 1px solid var(--border);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      color: var(--accent);
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+    .api-note {
+      font-size: 0.8rem;
+      color: var(--dim);
+      margin-top: 0.3rem;
+    }
+
+    /* ── Footer ──────────────────────────────────────────── */
+    #footer {
+      text-align: center;
+      padding: 1.2rem;
+      color: var(--dim);
+      font-size: 0.78rem;
+      border-top: 1px solid var(--border);
+    }
+    #footer a { color: #7070a0; text-decoration: none; }
+    #footer a:hover { color: var(--accent); }
+
+    {{{ STYLE }}}
+  </style>
+</head>
+<body>
+
+  <!-- ══ Header ══════════════════════════════════════════════ -->
+  <div id="header">
+    <h1>🤖 Otto Matic</h1>
+    <p>WebAssembly port — runs in your browser via Emscripten</p>
+  </div>
+
+  <!-- ══ Game area ══════════════════════════════════════════ -->
+  <div id="game-wrap">
+
+    <!-- Loading card -->
+    <div id="loading-card">
+      <img src="logo.png" alt="Otto Matic" onerror="this.style.opacity='0'">
+      <div id="status-text">Initialising…</div>
+      <progress id="progress-bar" value="0" max="1"></progress>
+      <div id="progress-label">Downloading game data…</div>
+    </div>
+
+    <!-- WebGL canvas (invisible while loading) -->
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <!-- Controls shown after load -->
+    <div id="toolbar">
+      <button class="btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+      <button class="btn" id="btn-mute" onclick="toggleMute()">🔊 Unmute</button>
+    </div>
+  </div>
+
+  <!-- ══ Level Editor API panel ═══════════════════════════ -->
+  <div id="api-panel">
+    <h2>Level Editor API</h2>
+    <p class="sub">
+      These exported WASM functions can be called from the browser console or
+      injected by your level-editor integration. The game also accepts
+      <code>?level=N</code> and <code>?terrain=PATH</code> URL params to skip
+      menus and load a specific level on startup.
+    </p>
+
+    <!-- Cheats -->
+    <div class="api-section">
+      <h3>Cheats &amp; Debug</h3>
+      <div class="api-row">
+        <label>Fence collisions</label>
+        <button class="btn on" id="btn-fence" onclick="toggleFences()">✓ Enabled</button>
+        <code>OttoMatic_SetFenceCollisions(0 | 1)</code>
+      </div>
+    </div>
+
+    <!-- Terrain override -->
+    <div class="api-section">
+      <h3>Terrain Override</h3>
+      <div class="api-row">
+        <label>Terrain file path</label>
+        <input type="text" id="terrain-path" placeholder="/Data/Terrain/Level1.ter">
+        <button class="btn" onclick="applyTerrain()">Apply</button>
+      </div>
+      <p class="api-note">
+        Path is resolved in the WASM virtual filesystem. Preloaded data lives under
+        <code>/Data/</code>. To supply a custom terrain, load it via
+        <code>FS.writeFile()</code> first, then call <code>OttoMatic_SetTerrainPath</code>.
+      </p>
+    </div>
+
+    <!-- Quick reference -->
+    <div class="api-section">
+      <h3>Quick Reference</h3>
+      <div class="api-row"><code>OttoMatic_SetFenceCollisions(0)</code> — disable fence collisions (pass through fences)</div>
+      <div class="api-row"><code>OttoMatic_SetFenceCollisions(1)</code> — re-enable fence collisions</div>
+      <div class="api-row"><code>OttoMatic_SetTerrainPath("/Data/Terrain/foo.ter")</code> — override terrain file for current level</div>
+      <div class="api-row" style="margin-top:0.5rem">URL params: <code>?level=3</code> · <code>?terrain=/Data/Terrain/Custom.ter</code></div>
+    </div>
+  </div>
+
+  <!-- ══ Footer ═══════════════════════════════════════════ -->
+  <div id="footer">
+    <p>
+      Otto Matic © 2001 Pangea Software, Inc. &nbsp;|&nbsp;
+      WebAssembly port:
+      <a href="https://github.com/LachlanBWWright/OttoMatic-Android">LachlanBWWright/OttoMatic-Android</a>
+      &nbsp;|&nbsp;
+      <a href="https://github.com/jorio/OttoMatic">Original source: jorio/OttoMatic</a>
+    </p>
+  </div>
+
+  <!-- ══ Emscripten Module config ═════════════════════════ -->
+  <script>
+    // ── URL param parsing for level-editor integration ────
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      window._startLevel   = params.has('level')   ? parseInt(params.get('level'),  10) : -1;
+      window._startTerrain = params.get('terrain') || '';
+    })();
+
+    var _fenceEnabled = true;
+    var _muted        = false;
+
+    // ── Emscripten Module ─────────────────────────────────
+    var Module = {
+      canvas: document.getElementById('canvas'),
+
+      // Pass level/terrain as C argc/argv when provided via URL params
+      arguments: (function () {
+        var a = [];
+        if (window._startLevel >= 0)  { a.push('--level',   String(window._startLevel)); }
+        if (window._startTerrain)     { a.push('--terrain', window._startTerrain); }
+        return a;
+      }()),
+
+      print:    function (t) { console.log('[OttoMatic]',  t); },
+      printErr: function (t) { console.warn('[OttoMatic]', t); },
+
+      setStatus: function (text) {
+        var el      = document.getElementById('status-text');
+        var card    = document.getElementById('loading-card');
+        var canvas  = document.getElementById('canvas');
+        var toolbar = document.getElementById('toolbar');
+
+        if (text) {
+          if (el) el.textContent = text;
+        } else {
+          // Loading finished — show the canvas, hide the loading card
+          if (card)    card.style.display    = 'none';
+          if (canvas)  { canvas.style.display = 'block'; canvas.focus(); }
+          if (toolbar) toolbar.style.display  = 'flex';
+        }
+      },
+
+      monitorRunDependencies: function (left) {
+        var bar   = document.getElementById('progress-bar');
+        var label = document.getElementById('progress-label');
+        if (!bar) return;
+        if (left === 0) {
+          bar.value = 1;
+          if (label) label.textContent = 'Preparing…';
+        } else {
+          // Heuristic: each dependency counts for ~2% progress
+          bar.value = Math.max(0, 1 - (left * 0.02));
+        }
+      },
+
+      onRuntimeInitialized: function () {
+        var el = document.getElementById('status-text');
+        if (el) el.textContent = 'Starting game…';
+      }
+    };
+
+    // ── UI helpers ────────────────────────────────────────
+
+    function toggleFences() {
+      _fenceEnabled = !_fenceEnabled;
+      var btn = document.getElementById('btn-fence');
+      try {
+        Module.ccall('OttoMatic_SetFenceCollisions', null, ['number'],
+                     [_fenceEnabled ? 1 : 0]);
+      } catch (e) {
+        console.warn('Module not ready yet:', e);
+      }
+      if (btn) {
+        btn.textContent = _fenceEnabled ? '✓ Enabled' : '✗ Disabled';
+        btn.className   = 'btn' + (_fenceEnabled ? ' on' : ' danger');
+      }
+    }
+
+    function applyTerrain() {
+      var path = (document.getElementById('terrain-path') || {}).value || '';
+      if (!path) return;
+      try {
+        Module.ccall('OttoMatic_SetTerrainPath', null, ['string'], [path]);
+      } catch (e) {
+        console.warn('Module not ready yet:', e);
+      }
+    }
+
+    function toggleFullscreen() {
+      var c = document.getElementById('canvas');
+      if (!c) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        c.requestFullscreen().catch(function (e) { console.warn(e); });
+      }
+    }
+
+    function toggleMute() {
+      _muted = !_muted;
+      var btn = document.getElementById('btn-mute');
+      // Emscripten SDL audio can be suspended via the AudioContext
+      try {
+        var ctx = Module.SDL2 && Module.SDL2.audioContext;
+        if (ctx) {
+          if (_muted) ctx.suspend(); else ctx.resume();
+        }
+      } catch (e) { /* ignore */ }
+      if (btn) btn.textContent = _muted ? '🔇 Muted' : '🔊 Unmute';
+    }
+  </script>
+
+  {{{ SCRIPT }}}
+</body>
+</html>

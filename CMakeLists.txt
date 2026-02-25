@@ -151,6 +151,7 @@ if(EMSCRIPTEN)
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
 		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath']"
 		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+		"SHELL:--shell-file ${CMAKE_SOURCE_DIR}/docs/shell.html"
 	)
 endif()
 
