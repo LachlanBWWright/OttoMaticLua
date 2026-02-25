@@ -130,13 +130,14 @@ if(EMSCRIPTEN)
 	set_target_properties(${GAME_TARGET} PROPERTIES SUFFIX ".html")
 
 	# Emscripten link flags for the WebAssembly build:
-	#   ASYNCIFY        - allows blocking C loops to yield to the browser event loop
-	#   FULL_ES2        - OpenGL ES 2.0 compatibility layer (maps to WebGL 1)
-	#   preload-file    - embed the Data/ folder into the virtual filesystem
-	#   EXPORTED_FUNCTIONS - export extra C functions callable from JavaScript
+	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
+	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
+	#   preload-file          - embed the Data/ folder into the virtual filesystem
+	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
 	target_link_options(${GAME_TARGET} PRIVATE
 		"SHELL:-sASYNCIFY=1"
-		"SHELL:-sFULL_ES2=1"
+		"SHELL:-sLEGACY_GL_EMULATION=1"
+		"SHELL:-sGL_UNSAFE_OPTS=0"
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
 		"SHELL:-sINITIAL_MEMORY=268435456"
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
