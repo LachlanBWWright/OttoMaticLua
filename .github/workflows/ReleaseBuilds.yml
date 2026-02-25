@@ -143,7 +143,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
         run: |
           SDL_VER=$(python3 -c "import re; m=re.search(r'sdl_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
-          GAME_VER=$(python3 -c "import re; m=re.search(r'game_ver\s*=\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          GAME_VER=$(python3 -c "import re; m=re.search(r'#define\s+GAME_VERSION\s+\"([^\"]+)\"', open('src/Headers/version.h').read()); print(m.group(1))")
 
           # Use SDL3's bundled Android project as the build scaffold
           cp -r extern/SDL3-src/android-project android-build
@@ -201,7 +201,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          GAME_VER=$(python3 -c "import re; m=re.search(r'game_ver\\s*=\\s*\"([^\"]+)\"', open('build.py').read()); print(m.group(1))")
+          GAME_VER=$(python3 -c "import re; m=re.search(r'#define\s+GAME_VERSION\s+\"([^\"]+)\"', open('src/Headers/version.h').read()); print(m.group(1))")
           TAG="v${GAME_VER}-wasm-android"
           echo "Automated WebAssembly and Android release." > release-notes.md
           echo "" >> release-notes.md

@@ -62,9 +62,14 @@ jobs:
         run: |
           mkdir -p _site
 
-          # Static assets from docs/ (logo used by the shell page, PDFs, etc.)
-          cp docs/logo.png       _site/logo.png 2>/dev/null || true
-          cp docs/screenshot.webp _site/screenshot.webp 2>/dev/null || true
+          # Copy all static assets from docs/ (logo, screenshots, PDFs, etc.)
+          # The shell.html and other docs/ files provide the UI; WASM files overlay on top.
+          for f in docs/*; do
+            case "$f" in
+              docs/shell.html) ;;  # Skip — the built OttoMatic.html (with our shell) is used instead
+              *) cp -r "$f" _site/ 2>/dev/null || true ;;
+            esac
+          done
 
           # WASM build output — rename the HTML entrypoint to index.html
           cp build/OttoMatic.html _site/index.html
