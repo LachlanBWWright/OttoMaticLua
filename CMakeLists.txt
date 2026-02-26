@@ -155,16 +155,14 @@ if(EMSCRIPTEN)
 	# Emscripten link flags for the WebAssembly build:
 	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
 	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
-	#   WASM_EXCEPTIONS       - native WASM exception handling (required with ASYNCIFY to
-	#                           avoid "function signature mismatch" traps caused by the
-	#                           interaction between ASYNCIFY and JS-emulated exceptions)
 	#   preload-file          - embed the Data/ folder into the virtual filesystem
 	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
+	# Note: WASM exception handling is enabled globally via -fwasm-exceptions (line 64)
+	#       and should not be specified as a linker flag in newer Emscripten versions.
 	target_link_options(${GAME_TARGET} PRIVATE
 		"SHELL:-sASYNCIFY=1"
 		"SHELL:-sLEGACY_GL_EMULATION=1"
 		"SHELL:-sGL_UNSAFE_OPTS=0"
-		"SHELL:-sWASM_EXCEPTIONS=1"
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
 		"SHELL:-sINITIAL_MEMORY=268435456"
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
