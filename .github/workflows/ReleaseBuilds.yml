@@ -97,11 +97,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {submodules: 'recursive'}
-      - name: Install Emscripten (emsdk)
-        uses: mymindstorm/setup-emsdk@v14
+      - name: Cache Emscripten SDK
+        id: cache-emsdk
+        uses: actions/cache@v4
         with:
-          version: latest
-          actions-cache-folder: .emsdk-cache
+          path: .emsdk
+          key: emsdk-${{ runner.os }}-${{ runner.arch }}-v1
+          restore-keys: emsdk-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install Emscripten (emsdk)
+        # git clone avoids 'emsdk update' which downloads from GitHub and fails
+        # with "Remote end closed connection" (mymindstorm/setup-emsdk JS bug:
+        # update:"false" is truthy, so emsdk update always runs on cache miss).
+        run: |
+          if [ ! -f .emsdk/emsdk ]; then
+            git clone --depth=1 https://github.com/emscripten-core/emsdk.git .emsdk
+            .emsdk/emsdk install latest
+          fi
+          .emsdk/emsdk activate latest
+          source .emsdk/emsdk_env.sh
+          echo "EMSDK=$EMSDK" >> "$GITHUB_ENV"
+          echo "EM_CONFIG=$EM_CONFIG" >> "$GITHUB_ENV"
+          echo "$EMSDK" >> "$GITHUB_PATH"
+          echo "$EMSDK/upstream/emscripten" >> "$GITHUB_PATH"
+          for d in "$EMSDK/node/"*/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done
       - name: Cache SDL3 source (WASM build)
         uses: actions/cache@v4
         with:
