@@ -18,3 +18,6 @@ extern/SDL*
 # macOS metadata
 .DS_Store
 
+.emsdk
+build/
+extern/SDL3-*

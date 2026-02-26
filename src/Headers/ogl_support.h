@@ -6,7 +6,12 @@
 
 #define	MAX_FILL_LIGHTS		4
 
-#define	USE_GL_COLOR_MATERIAL	1
+// glColorMaterial is not supported in WebGL/Emscripten, so disable it for WASM builds
+#ifdef __EMSCRIPTEN__
+	#define	USE_GL_COLOR_MATERIAL	0
+#else
+	#define	USE_GL_COLOR_MATERIAL	1
+#endif
 
 #if USE_GL_COLOR_MATERIAL
 	#define SetColor4fv(colorVV)		glColor4fv((colorVV))		// set current diffuse color
