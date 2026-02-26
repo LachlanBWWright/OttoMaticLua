@@ -55,8 +55,10 @@ jobs:
           source .emsdk/emsdk_env.sh
           echo "EMSDK=$EMSDK" >> "$GITHUB_ENV"
           echo "EM_CONFIG=$EM_CONFIG" >> "$GITHUB_ENV"
+          echo "EM_CACHE=$EM_CACHE" >> "$GITHUB_ENV"
           echo "$EMSDK" >> "$GITHUB_PATH"
           echo "$EMSDK/upstream/emscripten" >> "$GITHUB_PATH"
+          echo "$EMSDK/upstream/bin" >> "$GITHUB_PATH"
           for d in "$EMSDK/node/"*/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done
 
       # SDL3 is compiled as part of the WASM build; cache it to save ~2 min per run
