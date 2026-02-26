@@ -353,8 +353,10 @@ static void OGL_InitDrawContext(OGLViewDefType* viewDefPtr)
 		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, color);
 	}
 
+#if USE_GL_COLOR_MATERIAL
 	glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
 	glEnable(GL_COLOR_MATERIAL);
+#endif
 
   	glEnable(GL_NORMALIZE);
 
