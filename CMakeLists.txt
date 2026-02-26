@@ -90,13 +90,6 @@ else()
 	endif()
 	message("Building SDL3 from source: " ${SDL3_DIR})
 	add_subdirectory("${SDL3_DIR}" EXCLUDE_FROM_ALL)
-	# SDL3 generates SDL3Config.cmake and *Targets.cmake in its binary directory
-	# during the configure step.  Update SDL3_DIR to that binary directory so that
-	# subsequent find_package(SDL3 CONFIG) calls in subdirectories (e.g. Pomme)
-	# can locate the generated config files.
-	file(RELATIVE_PATH _sdl3_relpath "${CMAKE_SOURCE_DIR}" "${SDL3_DIR}")
-	set(SDL3_DIR "${CMAKE_BINARY_DIR}/${_sdl3_relpath}" CACHE PATH "" FORCE)
-	unset(_sdl3_relpath)
 endif()
 
 #------------------------------------------------------------------------------
