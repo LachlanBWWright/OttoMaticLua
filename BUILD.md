@@ -127,12 +127,12 @@ If you want to build the game **manually** instead, the rest of this document de
 
 ## GitHub Pages (live WASM demo)
 
-The CI/CD pipeline automatically builds and deploys the WebAssembly version to GitHub Pages whenever a commit is pushed to the `main` branch. The workflow is defined in `.github/workflows/deploy-pages.yml`.
+The CI/CD pipeline automatically builds and deploys the WebAssembly version to GitHub Pages whenever a commit is pushed to the `master` branch. The workflow is defined in `.github/workflows/deploy-pages.yml`.
 
 To enable GitHub Pages in your fork:
 1. Go to **Settings → Pages** in your repository.
 2. Set **Source** to **GitHub Actions**.
-3. Push a commit to `main` — the `Deploy to GitHub Pages` workflow will run and your game will be live at `https://<your-username>.github.io/<repo-name>/`.
+3. Push a commit to `master` — the `Deploy to GitHub Pages` workflow will run and your game will be live at `https://<your-username>.github.io/<repo-name>/`.
 
 The deployed page (`docs/shell.html`) provides:
 - A loading screen with progress indicator
