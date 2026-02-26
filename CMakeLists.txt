@@ -56,6 +56,14 @@ set(POMME_NO_QD3D		true)
 set(POMME_NO_VIDEO		true)
 add_compile_definitions(POMME_CASE_SENSITIVE_FSSPEC=1)
 
+# Use native WebAssembly exceptions with Emscripten to avoid "function signature
+# mismatch" traps that occur when ASYNCIFY and JS-emulated C++ exceptions interact.
+# This must be set globally (before add_subdirectory calls) so that all compiled
+# translation units — including Pomme — use the same exception-handling ABI.
+if(EMSCRIPTEN)
+	add_compile_options(-fwasm-exceptions)
+endif()
+
 #------------------------------------------------------------------------------
 # FIND SDL
 #------------------------------------------------------------------------------
@@ -147,12 +155,16 @@ if(EMSCRIPTEN)
 	# Emscripten link flags for the WebAssembly build:
 	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
 	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
+	#   WASM_EXCEPTIONS       - native WASM exception handling (required with ASYNCIFY to
+	#                           avoid "function signature mismatch" traps caused by the
+	#                           interaction between ASYNCIFY and JS-emulated exceptions)
 	#   preload-file          - embed the Data/ folder into the virtual filesystem
 	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
 	target_link_options(${GAME_TARGET} PRIVATE
 		"SHELL:-sASYNCIFY=1"
 		"SHELL:-sLEGACY_GL_EMULATION=1"
 		"SHELL:-sGL_UNSAFE_OPTS=0"
+		"SHELL:-sWASM_EXCEPTIONS=1"
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
 		"SHELL:-sINITIAL_MEMORY=268435456"
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
@@ -175,7 +187,9 @@ target_compile_definitions(${GAME_TARGET} PRIVATE
 
 if(NOT MSVC)
 	target_compile_options(${GAME_TARGET} PRIVATE
-		-fexceptions
+		# Skip -fexceptions for Emscripten: the global -fwasm-exceptions flag set
+		# above already provides native WASM exception support for all targets.
+		$<$<NOT:$<BOOL:${EMSCRIPTEN}>>:-fexceptions>
 		-Wall
 		-Wextra
 		-Wshadow
