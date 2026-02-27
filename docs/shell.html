@@ -75,12 +75,15 @@
     }
     #progress-label { font-size: 0.78rem; color: var(--dim); }
 
-    /* Canvas — hidden until loading complete */
+    /* Canvas — hidden by .loading class initially, shown when class is removed */
     #canvas {
-      display: none;
       max-width: 100%;
       border-radius: 6px;
       outline: none;
+    }
+    #canvas.loading {
+      height: 0 !important;
+      overflow: hidden;
     }
 
     /* Toolbar below canvas */
@@ -214,7 +217,7 @@
     </div>
 
     <!-- WebGL canvas (invisible while loading) -->
-    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <canvas id="canvas" class="loading" width="640" height="480" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
     <!-- Controls shown after load -->
     <div id="toolbar">
@@ -389,7 +392,7 @@
         } else {
           // Loading finished — show the canvas, hide the loading card
           if (card)    card.style.display    = 'none';
-          if (canvas)  { canvas.style.display = 'block'; canvas.focus(); }
+          if (canvas)  { canvas.classList.remove('loading'); canvas.focus(); }
           if (toolbar) toolbar.style.display  = 'flex';
         }
       },

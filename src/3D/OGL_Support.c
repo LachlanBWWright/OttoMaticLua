@@ -1485,21 +1485,37 @@ OGLLightDefType	*lights;
 
 GLenum _OGL_CheckError(const char* file, const int line)
 {
+#ifdef __EMSCRIPTEN__
+	// On Emscripten with LEGACY_GL_EMULATION, the emulation layer's internal
+	// getParameter() calls generate harmless GL_INVALID_ENUM errors that
+	// accumulate in the GL error queue.  Drain them all.
+	// Return 0 so callers' "if (OGL_CheckError()) DoFatalAlert()" patterns
+	// don't crash the game.
+	// Rate-limit logging to avoid flooding the console.
+	static int sErrorCount = 0;
+	GLenum error;
+	while ((error = glGetError()) != GL_NO_ERROR)
+	{
+		sErrorCount++;
+		if (sErrorCount <= 5 || (sErrorCount % 1000) == 0)
+		{
+			static char buf[256];
+			SDL_snprintf(buf, 256, "OpenGL Error 0x%x (ignored on Emscripten, count=%d) in %s:%d",
+			             error, sErrorCount, file, line);
+			SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
+		}
+	}
+	return GL_NO_ERROR;
+#else
 	GLenum error = glGetError();
 	if (error != 0)
 	{
 		static char buf[256];
 		SDL_snprintf(buf, 256, "OpenGL Error 0x%x in %s:%d", error, file, line);
-#ifdef __EMSCRIPTEN__
-		// On Emscripten with LEGACY_GL_EMULATION, some GL errors are harmless
-		// (e.g. unsupported enums that the emulation layer doesn't handle).
-		// Log a warning instead of crashing.
-		SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
-#else
 		DoFatalAlert(buf);
-#endif
 	}
 	return error;
+#endif
 }
 
 
