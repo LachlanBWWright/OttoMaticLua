@@ -9,6 +9,14 @@
 #include <string.h>
 #include <math.h>
 
+// IMPORTANT: #undef macros that this file implements, so the default/passthrough
+// cases can call the REAL OpenGL functions provided by Emscripten's GL emulation
+// instead of recursing back into our CompatGL_* wrappers.
+#undef glEnable
+#undef glDisable
+#undef glIsEnabled
+#undef glGetFloatv
+
 // Matrix stack implementation
 #define MATRIX_STACK_DEPTH 32
 
@@ -27,6 +35,8 @@ static int gCurrentTextureUnit = 0;
 static Boolean gLightingEnabled = false;
 static Boolean gFogEnabled = false;
 static Boolean gAlphaTestEnabled = false;
+static Boolean gTexture2DEnabled = false;
+static Boolean gNormalizeEnabled = false;
 static int gAlphaFunc = 7; // GL_ALWAYS
 static float gAlphaRef = 0.0f;
 
@@ -67,9 +77,37 @@ void CompatGL_Enable(GLenum cap)
         case GL_ALPHA_TEST:
             gAlphaTestEnabled = true;
             break;
-        // Other states (GL_BLEND, GL_DEPTH_TEST, etc.) pass through to real OpenGL
+        case GL_TEXTURE_2D:
+            gTexture2DEnabled = true;
+            break;
+
+        // States that don't exist in WebGL/GLES2 — silently ignore
+        case GL_NORMALIZE:
+            gNormalizeEnabled = true;
+            break;
+        case GL_RESCALE_NORMAL:
+        case GL_COLOR_MATERIAL:
+        case GL_TEXTURE_GEN_S:
+        case GL_TEXTURE_GEN_T:
+            break;
+
+        // Lights — track in our modern GL state
+        case GL_LIGHT0:
+        case GL_LIGHT1:
+        case GL_LIGHT2:
+        case GL_LIGHT3:
+        {
+            int idx = cap - GL_LIGHT0;
+            extern ModernGLState gModernGLState;
+            if (idx >= gModernGLState.numLights)
+                gModernGLState.numLights = idx + 1;
+            break;
+        }
+
+        // Other states (GL_BLEND, GL_DEPTH_TEST, GL_CULL_FACE, etc.)
+        // pass through to real WebGL glEnable (safe because we #undef'd the macro above)
         default:
-            glEnable(cap); // Call real OpenGL function via function pointer
+            glEnable(cap);
             break;
     }
 }
@@ -88,6 +126,27 @@ void CompatGL_Disable(GLenum cap)
         case GL_ALPHA_TEST:
             gAlphaTestEnabled = false;
             break;
+        case GL_TEXTURE_2D:
+            gTexture2DEnabled = false;
+            break;
+
+        // States that don't exist in WebGL/GLES2 — silently ignore
+        case GL_NORMALIZE:
+            gNormalizeEnabled = false;
+            break;
+        case GL_RESCALE_NORMAL:
+        case GL_COLOR_MATERIAL:
+        case GL_TEXTURE_GEN_S:
+        case GL_TEXTURE_GEN_T:
+            break;
+
+        // Lights — we don't truly disable them in the shader, but stop tracking
+        case GL_LIGHT0:
+        case GL_LIGHT1:
+        case GL_LIGHT2:
+        case GL_LIGHT3:
+            break;
+
         default:
             glDisable(cap);
             break;
@@ -433,6 +492,42 @@ void CompatGL_UpdateShaderState(void)
     // Use shader and update all uniforms
     ModernGL_UseShader();
     ModernGL_UpdateUniforms();
+}
+
+GLboolean CompatGL_IsEnabled(GLenum cap)
+{
+    switch (cap)
+    {
+        case GL_LIGHTING:       return gLightingEnabled;
+        case GL_FOG:            return gFogEnabled;
+        case GL_ALPHA_TEST:     return gAlphaTestEnabled;
+        case GL_TEXTURE_2D:     return gTexture2DEnabled;
+        case GL_NORMALIZE:      return gNormalizeEnabled;
+        case GL_RESCALE_NORMAL: return false;
+        case GL_COLOR_MATERIAL: return false;
+        default:
+            return glIsEnabled(cap);
+    }
+}
+
+void CompatGL_GetFloatv(GLenum pname, GLfloat* params)
+{
+    extern ModernGLState gModernGLState;
+    extern ImmediateModeBuffer gImmediateModeBuffer;
+
+    switch (pname)
+    {
+        case GL_CURRENT_COLOR:
+            // Return the current color from our immediate mode buffer
+            params[0] = gImmediateModeBuffer.currentColor[0];
+            params[1] = gImmediateModeBuffer.currentColor[1];
+            params[2] = gImmediateModeBuffer.currentColor[2];
+            params[3] = gImmediateModeBuffer.currentColor[3];
+            break;
+        default:
+            glGetFloatv(pname, params);
+            break;
+    }
 }
 
 #endif // __EMSCRIPTEN__

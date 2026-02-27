@@ -37,6 +37,10 @@ void CompatGL_Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top
 // Update shader uniforms before drawing
 void CompatGL_UpdateShaderState(void);
 
+// State queries for emulated GL states
+GLboolean CompatGL_IsEnabled(GLenum cap);
+void CompatGL_GetFloatv(GLenum pname, GLfloat* params);
+
 // Macro redirects for state functions
 #define glEnable CompatGL_Enable
 #define glDisable CompatGL_Disable
@@ -61,5 +65,7 @@ void CompatGL_UpdateShaderState(void);
 #define glScalef CompatGL_Scale
 #define glFrustum CompatGL_Frustum
 #define glOrtho CompatGL_Ortho
+#define glIsEnabled CompatGL_IsEnabled
+#define glGetFloatv CompatGL_GetFloatv
 
 #endif // __EMSCRIPTEN__

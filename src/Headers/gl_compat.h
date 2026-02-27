@@ -39,4 +39,8 @@
 // glMatrixMode, glLoadMatrix*, glMultMatrix*, glPushMatrix, glPopMatrix,
 // glTranslate*, glRotate*, glScale*, glFrustum, glOrtho
 
+// Functions that don't exist in WebGL/GLES2 — no-op
+#define glPolygonMode(face, mode) ((void)0)
+#define glHint(target, mode)      ((void)0)
+
 #endif // __EMSCRIPTEN__

@@ -53,6 +53,7 @@ void InitWindowStuff(void)
 	OGL_SetupWindow(&viewDef);
 	for (int i = 0; i < 45; i++)
 	{
+		GAME_YIELD_BROWSER();	// yield to browser event loop (required for Emscripten)
 		OGL_DrawScene(nil);
 		UpdateInput();  // will flush SDL events
 	}
