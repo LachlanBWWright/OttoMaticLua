@@ -217,6 +217,10 @@ static void ConvertVertexArraysToVBO(int vertexCount)
 
 void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
+    // Update shader state before drawing
+    extern void CompatGL_UpdateShaderState(void);
+    CompatGL_UpdateShaderState();
+
     // For now, we'll convert indexed draw to non-indexed by expanding vertices
     // A more optimized approach would use index buffers
 
@@ -249,6 +253,10 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
 
 void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
 {
+    // Update shader state before drawing
+    extern void CompatGL_UpdateShaderState(void);
+    CompatGL_UpdateShaderState();
+
     // Convert vertex arrays starting from 'first' for 'count' vertices
     // For simplicity, we'll convert the entire array and offset
     ConvertVertexArraysToVBO(first + count);

@@ -10,6 +10,7 @@
 #ifdef __EMSCRIPTEN__
 #include "modern_gl.h"
 #include "vertex_array_compat.h"
+#include "state_compat.h"
 
 // Immediate mode emulation
 #define glBegin(mode) ModernGL_BeginImmediateMode(mode)
@@ -28,8 +29,14 @@
 // For GL_QUADS: vertices 0,1,2,3 become triangles 0,1,2 and 0,2,3
 
 // Client-side vertex arrays
-// These are redirected via vertex_array_compat.h which defines the macros:
-// glEnableClientState, glDisableClientState, glVertexPointer, glNormalPointer,
-// glColorPointer, glTexCoordPointer, glDrawElements, glDrawArrays
+// Redirected via vertex_array_compat.h: glEnableClientState, glDisableClientState,
+// glVertexPointer, glNormalPointer, glColorPointer, glTexCoordPointer,
+// glDrawElements, glDrawArrays
+
+// State management
+// Redirected via state_compat.h: glEnable, glDisable, glAlphaFunc, glFog*,
+// glLight*, glMaterial*, glTexEnvi, glTexGeni, glActiveTexture,
+// glMatrixMode, glLoadMatrix*, glMultMatrix*, glPushMatrix, glPopMatrix,
+// glTranslate*, glRotate*, glScale*, glFrustum, glOrtho
 
 #endif // __EMSCRIPTEN__

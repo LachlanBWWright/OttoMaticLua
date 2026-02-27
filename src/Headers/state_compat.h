@@ -1,0 +1,65 @@
+//
+// state_compat.h
+// OpenGL state management compatibility for WebGL
+//
+
+#pragma once
+
+#ifdef __EMSCRIPTEN__
+
+#include "modern_gl.h"
+
+// State compatibility functions
+void CompatGL_Enable(GLenum cap);
+void CompatGL_Disable(GLenum cap);
+void CompatGL_AlphaFunc(GLenum func, GLfloat ref);
+void CompatGL_Fog(GLenum pname, GLfloat param);
+void CompatGL_Fogfv(GLenum pname, const GLfloat* params);
+void CompatGL_Fogi(GLenum pname, GLint param);
+void CompatGL_Light(GLenum light, GLenum pname, const GLfloat* params);
+void CompatGL_LightModelfv(GLenum pname, const GLfloat* params);
+void CompatGL_Material(GLenum face, GLenum pname, const GLfloat* params);
+void CompatGL_TexEnvi(GLenum target, GLenum pname, GLint param);
+void CompatGL_TexGeni(GLenum coord, GLenum pname, GLint param);
+void CompatGL_ActiveTexture(GLenum texture);
+void CompatGL_MatrixMode(GLenum mode);
+void CompatGL_LoadMatrix(const GLfloat* m);
+void CompatGL_LoadIdentity(void);
+void CompatGL_MultMatrix(const GLfloat* m);
+void CompatGL_PushMatrix(void);
+void CompatGL_PopMatrix(void);
+void CompatGL_Translate(GLfloat x, GLfloat y, GLfloat z);
+void CompatGL_Rotate(GLfloat angle, GLfloat x, GLfloat y, GLfloat z);
+void CompatGL_Scale(GLfloat x, GLfloat y, GLfloat z);
+void CompatGL_Frustum(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near, GLdouble far);
+void CompatGL_Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near, GLdouble far);
+
+// Update shader uniforms before drawing
+void CompatGL_UpdateShaderState(void);
+
+// Macro redirects for state functions
+#define glEnable CompatGL_Enable
+#define glDisable CompatGL_Disable
+#define glAlphaFunc CompatGL_AlphaFunc
+#define glFogf CompatGL_Fog
+#define glFogfv CompatGL_Fogfv
+#define glFogi CompatGL_Fogi
+#define glLightfv CompatGL_Light
+#define glLightModelfv CompatGL_LightModelfv
+#define glMaterialfv CompatGL_Material
+#define glTexEnvi CompatGL_TexEnvi
+#define glTexGeni CompatGL_TexGeni
+#define glActiveTexture CompatGL_ActiveTexture
+#define glMatrixMode CompatGL_MatrixMode
+#define glLoadMatrixf CompatGL_LoadMatrix
+#define glLoadIdentity CompatGL_LoadIdentity
+#define glMultMatrixf CompatGL_MultMatrix
+#define glPushMatrix CompatGL_PushMatrix
+#define glPopMatrix CompatGL_PopMatrix
+#define glTranslatef CompatGL_Translate
+#define glRotatef CompatGL_Rotate
+#define glScalef CompatGL_Scale
+#define glFrustum CompatGL_Frustum
+#define glOrtho CompatGL_Ortho
+
+#endif // __EMSCRIPTEN__

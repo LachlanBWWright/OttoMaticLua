@@ -606,6 +606,10 @@ void ModernGL_EndImmediateMode(void)
     if (gImmediateModeBuffer.vertexCount == 0)
         return;
 
+    // Update shader state before drawing
+    extern void CompatGL_UpdateShaderState(void);
+    CompatGL_UpdateShaderState();
+
     GLenum drawMode = gImmediateModeBuffer.mode;
     int numVertices = gImmediateModeBuffer.vertexCount;
 
