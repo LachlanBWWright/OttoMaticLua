@@ -90,6 +90,8 @@ float	timer = 43.0f;
 
 	do
 	{
+		GAME_YIELD_BROWSER();
+
 			/* MOVE */
 
 		CalcFramesPerSecond();

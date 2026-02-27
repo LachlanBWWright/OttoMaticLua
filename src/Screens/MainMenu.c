@@ -145,6 +145,8 @@ void DoMainMenuScreen(void)
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
+
 		/* CHECK USER CONTROL */
 
 		UpdateInput();
@@ -1546,6 +1548,7 @@ ObjNode	*glow, *text, *pane;
 
 	while(!gTextDone)
 	{
+		GAME_YIELD_BROWSER();
 		UpdateInput();
 		if (UserWantsOut())
 			gFadeInText = false;
@@ -1602,6 +1605,7 @@ ObjNode	*pane;
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
 		UpdateInput();
 		if (UserWantsOut())
 			gFadeInText = false;

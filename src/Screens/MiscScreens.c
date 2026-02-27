@@ -69,6 +69,7 @@ void DoLegalScreen(void)
 
 	do
 	{
+		GAME_YIELD_BROWSER();
 		CalcFramesPerSecond();
 		MoveObjects();
 		OGL_DrawScene(DrawObjects);

@@ -320,10 +320,23 @@
 
       print:    function (t) { console.log('[OttoMatic]',  t); },
       printErr: function (t) {
-        // Use console.error to avoid stack traces from Emscripten's LEGACY_GL_EMULATION
-        // The installHook.js from LEGACY_GL_EMULATION intercepts console methods and adds stack traces
-        // Using console.error with a string avoids this
-        console.error('[OttoMatic] ' + t);
+        // Log stderr output as warnings for visibility in the console.
+        // Emscripten's LEGACY_GL_EMULATION may intercept console methods; using
+        // string concatenation avoids extra stack traces from those hooks.
+        console.warn('[OttoMatic stderr] ' + t);
+      },
+
+      // Log key lifecycle events for debugging
+      onAbort: function (what) {
+        console.error('[OttoMatic] ABORT: ' + what);
+        var el = document.getElementById('status-text');
+        if (el) el.textContent = 'Error: ' + what;
+      },
+
+      onRuntimeInitialized: function () {
+        console.log('[OttoMatic] Runtime initialized');
+        var el = document.getElementById('status-text');
+        if (el) el.textContent = 'Starting game…';
       },
 
       preRun: [function() {
@@ -367,15 +380,11 @@
         if (left === 0) {
           bar.value = 1;
           if (label) label.textContent = 'Preparing…';
+          console.log('[OttoMatic] All dependencies loaded');
         } else {
           // Heuristic: each dependency counts for ~2% progress
           bar.value = Math.max(0, 1 - (left * 0.02));
         }
-      },
-
-      onRuntimeInitialized: function () {
-        var el = document.getElementById('status-text');
-        if (el) el.textContent = 'Starting game…';
       }
     };
 

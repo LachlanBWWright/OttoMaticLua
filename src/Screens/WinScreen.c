@@ -68,6 +68,8 @@ float	delayToTabloid = 6.0f;
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
+
 			/* MOVE */
 
 		CalcFramesPerSecond();
@@ -199,6 +201,7 @@ float	timer;
 
 	while((timer-=gFramesPerSecondFrac) > 0.0f)
 	{
+		GAME_YIELD_BROWSER();
 		UpdateInput();
 		if (UserWantsOut())
 			break;

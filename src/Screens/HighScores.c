@@ -318,6 +318,7 @@ void NewScore(void)
 
 	while(!gExitHighScores)
 	{
+		GAME_YIELD_BROWSER();
 
 		CalcFramesPerSecond();
 		UpdateInput();

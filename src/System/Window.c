@@ -76,6 +76,7 @@ void OGL_FadeOutScene(void (*drawCall)(void), void (*moveCall)(void))
 
 	while (fader->Mode != kFaderMode_Done)
 	{
+		GAME_YIELD_BROWSER();
 		CalcFramesPerSecond();
 		UpdateInput();
 
