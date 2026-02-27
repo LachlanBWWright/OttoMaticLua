@@ -59,6 +59,88 @@ EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_SetTerrainPath(const char* path)
 	SDL_strlcpy(gTerrainOverridePath, path, sizeof(gTerrainOverridePath));
 	sHasTerrainOverride = false;	// will be rebuilt on next level load
 }
+
+// God-mode flag: when >0 the player cannot lose health
+static int sGodMode = 0;
+
+// Movement speed multiplier (1.0 = normal)
+static float sSpeedMultiplier = 1.0f;
+
+// Exported: toggle god mode (immortality)
+EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_SetGodMode(int enabled)
+{
+	sGodMode = enabled;
+	SDL_Log("[LevelEditor] God mode: %s", enabled ? "ON" : "OFF");
+}
+
+// Exported: query god mode
+EMSCRIPTEN_KEEPALIVE extern "C" int OttoMatic_GetGodMode(void)
+{
+	return sGodMode;
+}
+
+// Exported: set movement speed multiplier
+EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_SetSpeedMultiplier(float multiplier)
+{
+	if (multiplier < 0.1f) multiplier = 0.1f;
+	if (multiplier > 10.0f) multiplier = 10.0f;
+	sSpeedMultiplier = multiplier;
+	SDL_Log("[LevelEditor] Speed multiplier: %.2f", multiplier);
+}
+
+// Exported: query speed multiplier
+EMSCRIPTEN_KEEPALIVE extern "C" float OttoMatic_GetSpeedMultiplier(void)
+{
+	return sSpeedMultiplier;
+}
+
+// Exported: warp (teleport) the player to specific world coordinates
+EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_WarpToCoord(float x, float y, float z)
+{
+	if (gPlayerInfo.objNode)
+	{
+		gPlayerInfo.objNode->Coord.x = x;
+		gPlayerInfo.objNode->Coord.y = y;
+		gPlayerInfo.objNode->Coord.z = z;
+		gPlayerInfo.coord.x = x;
+		gPlayerInfo.coord.y = y;
+		gPlayerInfo.coord.z = z;
+		SDL_Log("[LevelEditor] Warped player to (%.1f, %.1f, %.1f)", x, y, z);
+	}
+}
+
+// Exported: get current player coordinates as packed floats
+// Returns pointer to static array [x, y, z, health, lives]
+static float sPlayerState[5];
+EMSCRIPTEN_KEEPALIVE extern "C" float* OttoMatic_GetPlayerState(void)
+{
+	sPlayerState[0] = gPlayerInfo.coord.x;
+	sPlayerState[1] = gPlayerInfo.coord.y;
+	sPlayerState[2] = gPlayerInfo.coord.z;
+	sPlayerState[3] = gPlayerInfo.health;
+	sPlayerState[4] = (float)gPlayerInfo.lives;
+	return sPlayerState;
+}
+
+// Exported: skip to a specific level (triggers level completion then loads target)
+EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_SkipToLevel(int level)
+{
+	if (level < 0 || level > 9) return;
+	gLevelNum = level - 1;	// PlayGame increments before loading
+	gLevelCompleted = true;
+	gLevelCompletedCoolDownTimer = 0;
+	SDL_Log("[LevelEditor] Skipping to level %d", level);
+}
+
+// Exported: get current level number
+EMSCRIPTEN_KEEPALIVE extern "C" int OttoMatic_GetCurrentLevel(void)
+{
+	return gLevelNum;
+}
+
+// C-callable helpers for the god mode / speed multiplier hooks
+extern "C" int IsGodModeActive(void) { return sGodMode; }
+extern "C" float GetSpeedMultiplier(void) { return sSpeedMultiplier; }
 #endif
 
 static fs::path FindGameData(const char* executablePath)

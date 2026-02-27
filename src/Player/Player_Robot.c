@@ -254,6 +254,15 @@ int		i;
 	gTargetMaxSpeed = PLAYER_NORMAL_MAX_SPEED;
 	gCurrentMaxSpeed = PLAYER_NORMAL_MAX_SPEED;
 
+#ifdef __EMSCRIPTEN__
+	{
+		extern float GetSpeedMultiplier(void);
+		float mult = GetSpeedMultiplier();
+		gTargetMaxSpeed *= mult;
+		gCurrentMaxSpeed *= mult;
+	}
+#endif
+
 
 
 	AttachShadowToObject(newObj, 0, DEFAULT_PLAYER_SHADOW_SCALE,DEFAULT_PLAYER_SHADOW_SCALE * .8f, true);
@@ -1668,6 +1677,20 @@ float fps = gFramesPerSecondFrac;
 	VectorLength2D(theNode->Speed2D, gDelta.x, gDelta.z);
 	theNode->Speed3D = CalcVectorLength(&gDelta);
 
+#ifdef __EMSCRIPTEN__
+	{
+		extern float GetSpeedMultiplier(void);
+		float mult = GetSpeedMultiplier();
+		float scaledTarget = gTargetMaxSpeed * mult;
+		if (theNode->Speed2D < scaledTarget)
+			gCurrentMaxSpeed = scaledTarget;
+		else if (gCurrentMaxSpeed > scaledTarget)
+		{
+			if (theNode->Speed2D < gCurrentMaxSpeed)
+				gCurrentMaxSpeed = theNode->Speed2D;
+		}
+	}
+#else
 	if (theNode->Speed2D < gTargetMaxSpeed)					// if we're less than the target, then just reset current to target
 		gCurrentMaxSpeed = gTargetMaxSpeed;
 	else
@@ -1678,6 +1701,7 @@ float fps = gFramesPerSecondFrac;
 			gCurrentMaxSpeed = theNode->Speed2D;
 		}
 	}
+#endif
 
 			/* UPDATE SPARKLES & FLAME */
 
