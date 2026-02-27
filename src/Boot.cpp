@@ -138,36 +138,45 @@ static void ParseLevelEditorArgs(int argc, char** argv)
 static void Boot(int argc, char** argv)
 {
 	SDL_SetAppMetadata(GAME_FULL_NAME, GAME_VERSION, GAME_IDENTIFIER);
-#if _DEBUG
+	// Always use verbose logging on Emscripten for browser console visibility
+#ifdef __EMSCRIPTEN__
+	SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
+#elif _DEBUG
 	SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 #else
 	SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
 #endif
 
+	SDL_Log("Boot: starting...");
+
 	// Parse level editor / WASM arguments before Pomme init
 	ParseLevelEditorArgs(argc, argv);
 
 	// Start our "machine"
+	SDL_Log("Boot: Pomme::Init...");
 	Pomme::Init();
 
 	// Find path to game data folder
 	const char* executablePath = argc > 0 ? argv[0] : NULL;
+	SDL_Log("Boot: FindGameData...");
 	fs::path dataPath = FindGameData(executablePath);
 
 	// Build terrain override FSSpec if a path was specified
 	BuildTerrainOverrideSpec();
 
 	// Load game prefs before starting
+	SDL_Log("Boot: LoadPrefs...");
 	LoadPrefs();
 
 retryVideo:
 	// Initialize SDL video subsystem
+	SDL_Log("Boot: SDL_Init(VIDEO)...");
 	if (!SDL_Init(SDL_INIT_VIDEO))
 	{
 		throw std::runtime_error("Couldn't initialize SDL video subsystem.");
 	}
 
-	// Create window
+	SDL_Log("Boot: Creating window...");
 #ifdef __EMSCRIPTEN__
 	// WebAssembly: use OpenGL ES 2 (maps to WebGL 1)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -190,6 +199,8 @@ retryVideo:
 	gSDLWindow = SDL_CreateWindow(
 		GAME_FULL_NAME " " GAME_VERSION, 640, 480,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+
+	SDL_Log("Boot: Window created: %p", (void*)gSDLWindow);
 
 	if (!gSDLWindow)
 	{

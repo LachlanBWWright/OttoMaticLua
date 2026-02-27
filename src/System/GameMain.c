@@ -980,18 +980,31 @@ void GameMain(void)
 				/* BOOT STUFF */
 				/**************/
 
+	SDL_Log("GameMain: ToolBoxInit...");
 	ToolBoxInit();
 
 			/* INIT SOME OF MY STUFF */
 
+	SDL_Log("GameMain: InitSpriteManager...");
+	GAME_YIELD_BROWSER();		// yield to browser during long init
 	InitSpriteManager();
+	SDL_Log("GameMain: InitBG3DManager...");
 	InitBG3DManager();
+	SDL_Log("GameMain: InitObjectManager...");
 	InitObjectManager();
+	GAME_YIELD_BROWSER();		// yield to browser during long init
+	SDL_Log("GameMain: InitWindowStuff...");
 	InitWindowStuff();
+	SDL_Log("GameMain: InitTerrainManager...");
 	InitTerrainManager();
+	SDL_Log("GameMain: InitSkeletonManager...");
 	InitSkeletonManager();
+	GAME_YIELD_BROWSER();		// yield to browser during long init
+	SDL_Log("GameMain: InitSoundTools...");
 	InitSoundTools();
+	SDL_Log("GameMain: TextMesh_LoadMetrics...");
 	TextMesh_LoadMetrics();
+	SDL_Log("GameMain: Init complete, entering game loop...");
 
 
 			/* INIT MORE MY STUFF */
