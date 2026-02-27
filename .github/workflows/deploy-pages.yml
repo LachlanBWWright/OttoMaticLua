@@ -110,6 +110,8 @@ jobs:
         with:
           path: _site/
 
+  # Deploy to GitHub Pages — only runs on master to avoid environment
+  # protection conflicts on non-master branches.
   deploy:
     needs: build
     if: github.ref == 'refs/heads/master'
