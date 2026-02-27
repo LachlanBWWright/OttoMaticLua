@@ -5,6 +5,11 @@
 - Ported to SDL 3
 - **NOTE:** The Mac version now requires macOS 10.13.
 
+WebAssembly/Browser version improvements:
+- Fixed excessive console noise from GL emulation stack traces
+- Suppressed filesystem error for config directory (not needed in browser)
+- Documented known SDL3-related browser warnings (ScriptProcessorNode deprecation, non-passive event listeners)
+
 ## **4.0.1** (Jan 2023)
 
 Quality of life improvements:

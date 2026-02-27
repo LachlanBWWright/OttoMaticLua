@@ -281,6 +281,21 @@
 
   <!-- ══ Emscripten Module config ═════════════════════════ -->
   <script>
+    // ─────────────────────────────────────────────────────────────────────────
+    // KNOWN BROWSER WARNINGS (NOT ERRORS - GAME WORKS FINE)
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. ScriptProcessorNode deprecation warning:
+    //    This comes from SDL3's audio backend using deprecated Web Audio API.
+    //    The game's audio works correctly. SDL3 will migrate to AudioWorklet in
+    //    a future release. This is a cosmetic warning only.
+    //
+    // 2. Non-passive event listener warnings (wheel, touchstart, touchmove):
+    //    These come from SDL3's event handling code. They allow the game to
+    //    prevent default browser scrolling behavior. Modern best practice would
+    //    use passive listeners, but SDL3 needs to prevent defaults for game input.
+    //    These warnings don't affect functionality or performance.
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ── URL param parsing for level-editor integration ────
     (function () {
       var params = new URLSearchParams(window.location.search);
@@ -304,7 +319,30 @@
       }()),
 
       print:    function (t) { console.log('[OttoMatic]',  t); },
-      printErr: function (t) { console.warn('[OttoMatic]', t); },
+      printErr: function (t) {
+        // Use console.error to avoid stack traces from Emscripten's LEGACY_GL_EMULATION
+        // The installHook.js from LEGACY_GL_EMULATION intercepts console methods and adds stack traces
+        // Using console.error with a string avoids this
+        console.error('[OttoMatic] ' + t);
+      },
+
+      preRun: [function() {
+        // Suppress the DirCreate error for the config directory
+        // The browser's virtual filesystem doesn't need this directory for the game to work
+        try {
+          // Create parent directories if they don't exist
+          FS.mkdir('/home');
+        } catch (e) { /* ignore if exists */ }
+        try {
+          FS.mkdir('/home/web_user');
+        } catch (e) { /* ignore if exists */ }
+        try {
+          FS.mkdir('/home/web_user/.config');
+        } catch (e) { /* ignore if exists */ }
+        try {
+          FS.mkdir('/home/web_user/.config/OttoMatic');
+        } catch (e) { /* ignore if exists */ }
+      }],
 
       setStatus: function (text) {
         var el      = document.getElementById('status-text');

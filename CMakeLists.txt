@@ -159,6 +159,7 @@ if(EMSCRIPTEN)
 	# Emscripten link flags for the WebAssembly build:
 	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
 	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
+	#   GL_DEBUG              - disable GL emulation debug messages (reduces console noise)
 	#   preload-file          - embed the Data/ folder into the virtual filesystem
 	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
 	# Note: WASM exception handling is enabled globally via -fwasm-exceptions (line 64)
@@ -166,12 +167,13 @@ if(EMSCRIPTEN)
 	target_link_options(${GAME_TARGET} PRIVATE
 		"SHELL:-sASYNCIFY=1"
 		"SHELL:-sLEGACY_GL_EMULATION=1"
+		"SHELL:-sGL_DEBUG=0"
 		"SHELL:-sGL_UNSAFE_OPTS=0"
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
 		"SHELL:-sINITIAL_MEMORY=268435456"
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
 		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath']"
-		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']"
 		"SHELL:--shell-file ${CMAKE_SOURCE_DIR}/docs/shell.html"
 	)
 endif()
