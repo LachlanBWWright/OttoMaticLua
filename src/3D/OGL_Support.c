@@ -261,14 +261,17 @@ static void OGL_CreateDrawContext(void)
 
 			/* CREATE AGL CONTEXT & ATTACH TO WINDOW */
 
+	SDL_Log("OGL_CreateDrawContext: Creating GL context...");
 	gAGLContext = SDL_GL_CreateContext(gSDLWindow);
 	GAME_ASSERT_MESSAGE(gAGLContext, SDL_GetError());
 	GAME_ASSERT(glGetError() == GL_NO_ERROR);
+	SDL_Log("OGL_CreateDrawContext: GL context created");
 
 			/* ACTIVATE CONTEXT */
 
 	bool didMakeCurrent = SDL_GL_MakeCurrent(gSDLWindow, gAGLContext);
 	GAME_ASSERT_MESSAGE(didMakeCurrent, SDL_GetError());
+	SDL_Log("OGL_CreateDrawContext: GL context made current");
 
 
 			/* GET OPENGL EXTENSIONS */
@@ -284,8 +287,10 @@ static void OGL_CreateDrawContext(void)
 
 	GLint maxTexSize = 0;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTexSize);
+	SDL_Log("OGL_CreateDrawContext: Max texture size = %d", maxTexSize);
 	if (maxTexSize < 1024)
 		DoFatalAlert("Your video card cannot do 1024x1024 textures, so it is below the game's minimum system requirements.");
+	SDL_Log("OGL_CreateDrawContext: Done");
 }
 
 
@@ -791,6 +796,83 @@ int	t,b,l,r;
 
 /***************** OGL TEXTUREMAP LOAD **************************/
 
+#ifdef __EMSCRIPTEN__
+//
+// WebGL only supports a small set of format/type combos for glTexImage2D:
+//   GL_RGBA  + GL_UNSIGNED_BYTE
+//   GL_RGB   + GL_UNSIGNED_BYTE
+//   GL_RGBA  + GL_UNSIGNED_SHORT_4_4_4_4
+//   GL_RGBA  + GL_UNSIGNED_SHORT_5_5_5_1
+//   GL_RGB   + GL_UNSIGNED_SHORT_5_6_5
+//   GL_LUMINANCE / GL_LUMINANCE_ALPHA / GL_ALPHA + GL_UNSIGNED_BYTE
+//
+// Desktop OpenGL combos that this game uses but WebGL does NOT support:
+//   GL_BGRA_EXT + GL_UNSIGNED_SHORT_1_5_5_5_REV   (16-bit packed BGRA1555)
+//
+// This helper converts the pixel data to GL_RGBA + GL_UNSIGNED_BYTE.
+//
+static void* ConvertTextureForWebGL(const void* src, int width, int height,
+                                     GLint* ioSrcFormat, GLint* ioDestFormat,
+                                     GLint* ioDataType)
+{
+    if (*ioDataType == GL_UNSIGNED_SHORT_1_5_5_5_REV && *ioSrcFormat == GL_BGRA_EXT)
+    {
+        // Convert 16-bit BGRA-1555-REV to 32-bit RGBA-8888
+        //
+        // GL_UNSIGNED_SHORT_1_5_5_5_REV packs each pixel in a uint16:
+        //   bit 15        = A (1 bit)
+        //   bits 14-10    = R (5 bits)
+        //   bits  9-5     = G (5 bits)
+        //   bits  4-0     = B (5 bits)
+        // (The component order flips to BGRA with the _REV suffix applied to
+        //  the GL_BGRA format.)
+
+        int pixelCount = width * height;
+        uint8_t* rgba = (uint8_t*)malloc(pixelCount * 4);
+        const uint16_t* src16 = (const uint16_t*)src;
+
+        for (int i = 0; i < pixelCount; i++)
+        {
+            uint16_t p = src16[i];
+            uint8_t a = (p >> 15) & 0x01;
+            uint8_t r = (p >> 10) & 0x1F;
+            uint8_t g = (p >>  5) & 0x1F;
+            uint8_t b = (p >>  0) & 0x1F;
+
+            rgba[i * 4 + 0] = (r << 3) | (r >> 2);   // expand 5-bit to 8-bit
+            rgba[i * 4 + 1] = (g << 3) | (g >> 2);
+            rgba[i * 4 + 2] = (b << 3) | (b >> 2);
+            rgba[i * 4 + 3] = a ? 255 : 0;
+        }
+
+        *ioSrcFormat  = GL_RGBA;
+        *ioDestFormat = GL_RGBA;
+        *ioDataType   = GL_UNSIGNED_BYTE;
+        return rgba;   // caller must free()
+    }
+
+    // WebGL requires internalFormat == format for glTexImage2D.
+    // Desktop OpenGL allows mismatches (e.g. src=GL_RGBA, dest=GL_RGB drops alpha),
+    // but WebGL does not.  Force them to match.
+    if (*ioDataType == GL_UNSIGNED_BYTE)
+    {
+        if (*ioSrcFormat == GL_RGBA && *ioDestFormat == GL_RGB)
+        {
+            // Keep src RGBA as-is, but set internalFormat to RGBA so WebGL accepts it
+            *ioDestFormat = GL_RGBA;
+        }
+        else if (*ioSrcFormat == GL_RGB && *ioDestFormat == GL_RGBA)
+        {
+            // Src is RGB, dest wants RGBA — set both to RGB (alpha will be 1.0)
+            *ioDestFormat = GL_RGB;
+        }
+    }
+
+    // No pixel data conversion needed — return NULL to signal "use original pointer"
+    return NULL;
+}
+#endif // __EMSCRIPTEN__
+
 GLuint OGL_TextureMap_Load(void *imageMemory, int width, int height,
 							GLint srcFormat,  GLint destFormat, GLint dataType)
 {
@@ -801,6 +883,17 @@ GLuint	textureName;
 		ConvertTextureToColorAnaglyph(imageMemory, width, height, srcFormat, dataType);
 	else if (gGamePrefs.anaglyphMode == ANAGLYPH_MONO)
 		ConvertTextureToGrey(imageMemory, width, height, srcFormat, dataType);
+
+#ifdef __EMSCRIPTEN__
+	// WebGL has strict format requirements — convert unsupported combos
+	void* convertedPixels = ConvertTextureForWebGL(imageMemory, width, height,
+	                                                &srcFormat, &destFormat, &dataType);
+	if (convertedPixels)
+		imageMemory = convertedPixels;
+
+	SDL_Log("OGL_TextureMap_Load: %dx%d src=0x%x dest=0x%x type=0x%x",
+	        width, height, srcFormat, destFormat, dataType);
+#endif
 
 			/* GET A UNIQUE TEXTURE NAME & INITIALIZE IT */
 
@@ -829,6 +922,11 @@ GLuint	textureName;
 
 	if (OGL_CheckError())
 		DoFatalAlert("OGL_TextureMap_Load: glTexImage2D failed!");
+
+#ifdef __EMSCRIPTEN__
+	if (convertedPixels)
+		free(convertedPixels);
+#endif
 
 
 				/* SET THIS TEXTURE AS CURRENTLY ACTIVE FOR DRAWING */
@@ -1196,6 +1294,13 @@ uint32_t	a;
 
 void OGL_Texture_SetOpenGLTexture(GLuint textureName)
 {
+#ifdef __EMSCRIPTEN__
+	// Clear any pending GL errors left by Emscripten's LEGACY_GL_EMULATION
+	// (e.g. INVALID_ENUM from getParameter with unsupported enums).
+	// These are harmless side-effects of the emulation layer, not real errors.
+	while (glGetError() != GL_NO_ERROR) {}
+#endif
+
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	if (OGL_CheckError())
 		DoFatalAlert("OGL_Texture_SetOpenGLTexture: glPixelStorei failed!");
