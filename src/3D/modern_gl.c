@@ -288,6 +288,9 @@ Boolean ModernGL_LoadShaders(void)
 {
     printf("[ModernGL] Loading shaders...\n");
 
+    // Clear any pending GL errors
+    while (glGetError() != GL_NO_ERROR);
+
     GLuint vertShader = CompileShader(GL_VERTEX_SHADER, gVertexShaderSource);
     if (!vertShader) return false;
 
@@ -303,6 +306,13 @@ Boolean ModernGL_LoadShaders(void)
     glDeleteShader(fragShader);
 
     if (!gModernGLShader.program) return false;
+
+    // Check for GL errors after shader creation
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR)
+    {
+        printf("[ModernGL] GL error after shader creation: 0x%x\n", error);
+    }
 
     // Get attribute locations
     gModernGLShader.aPosition = ATTRIB_LOCATION_POSITION;
@@ -341,6 +351,16 @@ Boolean ModernGL_LoadShaders(void)
     gModernGLShader.uAlphaRef = glGetUniformLocation(gModernGLShader.program, "uAlphaRef");
     gModernGLShader.uGlobalTransparency = glGetUniformLocation(gModernGLShader.program, "uGlobalTransparency");
     gModernGLShader.uGlobalColorFilter = glGetUniformLocation(gModernGLShader.program, "uGlobalColorFilter");
+
+    // Verify critical uniforms were found
+    if (gModernGLShader.uMVPMatrix == -1 || gModernGLShader.uNormalMatrix == -1)
+    {
+        printf("[ModernGL] WARNING: Critical uniforms not found in shader program!\n");
+        if (gModernGLShader.uMVPMatrix == -1)
+            printf("[ModernGL]   - uMVPMatrix not found\n");
+        if (gModernGLShader.uNormalMatrix == -1)
+            printf("[ModernGL]   - uNormalMatrix not found\n");
+    }
 
     printf("[ModernGL] Shaders loaded successfully\n");
     return true;
