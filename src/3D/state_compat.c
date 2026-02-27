@@ -99,7 +99,7 @@ void CompatGL_Enable(GLenum cap)
         {
             int idx = cap - GL_LIGHT0;
             extern ModernGLState gModernGLState;
-            if (idx >= gModernGLState.numLights)
+            if (idx >= 0 && idx < 4 && idx >= gModernGLState.numLights)
                 gModernGLState.numLights = idx + 1;
             break;
         }

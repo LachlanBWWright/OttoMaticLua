@@ -247,7 +247,14 @@ void ModernGL_Init(void)
         EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_get_current_context();
         if (ctx) {
             EM_BOOL ok = emscripten_webgl_enable_extension(ctx, "OES_element_index_uint");
-            printf("[ModernGL] OES_element_index_uint: %s\n", ok ? "enabled" : "NOT available");
+            if (ok) {
+                printf("[ModernGL] OES_element_index_uint: enabled\n");
+            } else {
+                printf("[ModernGL] WARNING: OES_element_index_uint NOT available — "
+                       "32-bit index buffers may not work\n");
+            }
+        } else {
+            printf("[ModernGL] WARNING: No WebGL context — cannot enable extensions\n");
         }
     }
 
