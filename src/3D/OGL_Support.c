@@ -856,6 +856,13 @@ static void* ConvertTextureForWebGL(const void* src, int width, int height,
     // but WebGL does not.  Force them to match.
     if (*ioDataType == GL_UNSIGNED_BYTE)
     {
+        // GL_RGB5_A1 is a desktop-only internalFormat that WebGL rejects with
+        // GL_UNSIGNED_BYTE data.  Map it to the closest WebGL-valid format.
+        if (*ioDestFormat == GL_RGB5_A1)
+        {
+            *ioDestFormat = (*ioSrcFormat == GL_RGBA) ? GL_RGBA : GL_RGB;
+        }
+
         if (*ioSrcFormat == GL_RGBA && *ioDestFormat == GL_RGB)
         {
             // Keep src RGBA as-is, but set internalFormat to RGBA so WebGL accepts it
@@ -865,6 +872,12 @@ static void* ConvertTextureForWebGL(const void* src, int width, int height,
         {
             // Src is RGB, dest wants RGBA — set both to RGB (alpha will be 1.0)
             *ioDestFormat = GL_RGB;
+        }
+
+        // Catch-all: if src and dest still don't match, force them equal
+        if (*ioSrcFormat != *ioDestFormat)
+        {
+            *ioDestFormat = *ioSrcFormat;
         }
     }
 
@@ -890,6 +903,17 @@ GLuint	textureName;
 	                                                &srcFormat, &destFormat, &dataType);
 	if (convertedPixels)
 		imageMemory = convertedPixels;
+
+	// Log texture format info for debugging
+	{
+		static int sTexLoadCount = 0;
+		sTexLoadCount++;
+		if (sTexLoadCount <= 10)
+		{
+			SDL_Log("[ModernGL] TextureLoad #%d: %dx%d src=0x%x dest=0x%x type=0x%x",
+			        sTexLoadCount, width, height, srcFormat, destFormat, dataType);
+		}
+	}
 #endif
 
 			/* GET A UNIQUE TEXTURE NAME & INITIALIZE IT */
@@ -1483,22 +1507,27 @@ OGLLightDefType	*lights;
 GLenum _OGL_CheckError(const char* file, const int line)
 {
 #ifdef __EMSCRIPTEN__
-	// On Emscripten with LEGACY_GL_EMULATION, the emulation layer's internal
-	// getParameter() calls generate harmless GL_INVALID_ENUM errors that
-	// accumulate in the GL error queue.  Drain them all.
-	// Return 0 so callers' "if (OGL_CheckError()) DoFatalAlert()" patterns
-	// don't crash the game.
-	// Rate-limit logging to avoid flooding the console.
+	// On Emscripten, drain all GL errors. Return 0 so callers'
+	// "if (OGL_CheckError()) DoFatalAlert()" patterns don't crash the game.
+	// Log more verbosely to help diagnose rendering issues.
 	static int sErrorCount = 0;
 	GLenum error;
 	while ((error = glGetError()) != GL_NO_ERROR)
 	{
 		sErrorCount++;
-		if (sErrorCount <= 5 || (sErrorCount % 1000) == 0)
+		if (sErrorCount <= 50 || (sErrorCount % 500) == 0)
 		{
-			static char buf[256];
-			SDL_snprintf(buf, 256, "OpenGL Error 0x%x (ignored on Emscripten, count=%d) in %s:%d",
-			             error, sErrorCount, file, line);
+			const char* errorName = "UNKNOWN";
+			switch (error) {
+				case 0x0500: errorName = "GL_INVALID_ENUM"; break;
+				case 0x0501: errorName = "GL_INVALID_VALUE"; break;
+				case 0x0502: errorName = "GL_INVALID_OPERATION"; break;
+				case 0x0505: errorName = "GL_OUT_OF_MEMORY"; break;
+				case 0x0506: errorName = "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
+			}
+			static char buf[512];
+			SDL_snprintf(buf, 512, "GL Error 0x%x (%s) [total=%d] at %s:%d",
+			             error, errorName, sErrorCount, file, line);
 			SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
 		}
 	}

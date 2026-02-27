@@ -158,7 +158,9 @@ if(EMSCRIPTEN)
 	# Emscripten link flags for the WebAssembly build:
 	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
 	#   ASYNCIFY_STACK_SIZE   - stack size for asyncify (default 4096 is too small for this game)
-	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
+	#   FULL_ES2              - provides full OpenGL ES 2.0 emulation (no legacy GL emulation;
+	#                           our custom compat layer in state_compat.c / modern_gl.c
+	#                           translates legacy OpenGL calls to shader-based rendering)
 	#   GL_DEBUG              - disable GL emulation debug messages (reduces console noise)
 	#   preload-file          - embed the Data/ folder into the virtual filesystem
 	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
@@ -171,7 +173,7 @@ if(EMSCRIPTEN)
 		"SHELL:-sASYNCIFY=1"
 		"SHELL:-sASYNCIFY_STACK_SIZE=65536"
 		"SHELL:-sDISABLE_EXCEPTION_CATCHING=0"
-		"SHELL:-sLEGACY_GL_EMULATION=1"
+		"SHELL:-sFULL_ES2=1"
 		"SHELL:-sGL_DEBUG=0"
 		"SHELL:-sGL_UNSAFE_OPTS=0"
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
