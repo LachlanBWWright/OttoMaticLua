@@ -606,18 +606,95 @@ void ModernGL_EndImmediateMode(void)
     if (gImmediateModeBuffer.vertexCount == 0)
         return;
 
-    // Create temporary geometry and render
-    ModernGLGeometry* geom = ModernGL_CreateGeometry(gImmediateModeBuffer.vertexCount, 0, true);
+    GLenum drawMode = gImmediateModeBuffer.mode;
+    int numVertices = gImmediateModeBuffer.vertexCount;
 
-    memcpy(geom->positions, gImmediateModeBuffer.positions, gImmediateModeBuffer.vertexCount * 3 * sizeof(GLfloat));
-    memcpy(geom->normals, gImmediateModeBuffer.normals, gImmediateModeBuffer.vertexCount * 3 * sizeof(GLfloat));
-    memcpy(geom->colors, gImmediateModeBuffer.colors, gImmediateModeBuffer.vertexCount * 4 * sizeof(GLfloat));
-    memcpy(geom->texCoords0, gImmediateModeBuffer.texCoords, gImmediateModeBuffer.vertexCount * 2 * sizeof(GLfloat));
-    // texCoords1 is same as texCoords0 for immediate mode
-    memcpy(geom->texCoords1, gImmediateModeBuffer.texCoords, gImmediateModeBuffer.vertexCount * 2 * sizeof(GLfloat));
+    // Convert GL_QUADS to GL_TRIANGLES (WebGL doesn't support quads)
+    if (gImmediateModeBuffer.mode == GL_QUADS)
+    {
+        // Each quad (4 vertices) becomes 2 triangles (6 vertices)
+        int numQuads = gImmediateModeBuffer.vertexCount / 4;
+        numVertices = numQuads * 6;
+        drawMode = GL_TRIANGLES;
 
-    ModernGL_DrawGeometry(geom, gImmediateModeBuffer.mode);
-    ModernGL_FreeGeometry(geom);
+        // Create temporary geometry with expanded vertices
+        ModernGLGeometry* geom = ModernGL_CreateGeometry(numVertices, 0, true);
+
+        // Convert quads to triangles: 0,1,2,3 -> 0,1,2, 0,2,3
+        for (int q = 0; q < numQuads; q++)
+        {
+            int srcIdx = q * 4;
+            int dstIdx = q * 6;
+
+            // First triangle: 0,1,2
+            for (int v = 0; v < 3; v++)
+            {
+                int src = srcIdx + v;
+                int dst = dstIdx + v;
+                memcpy(&geom->positions[dst * 3], &gImmediateModeBuffer.positions[src * 3], 3 * sizeof(GLfloat));
+                memcpy(&geom->normals[dst * 3], &gImmediateModeBuffer.normals[src * 3], 3 * sizeof(GLfloat));
+                memcpy(&geom->colors[dst * 4], &gImmediateModeBuffer.colors[src * 4], 4 * sizeof(GLfloat));
+                memcpy(&geom->texCoords0[dst * 2], &gImmediateModeBuffer.texCoords[src * 2], 2 * sizeof(GLfloat));
+                memcpy(&geom->texCoords1[dst * 2], &gImmediateModeBuffer.texCoords[src * 2], 2 * sizeof(GLfloat));
+            }
+
+            // Second triangle: 0,2,3
+            int indices[3] = {0, 2, 3};
+            for (int v = 0; v < 3; v++)
+            {
+                int src = srcIdx + indices[v];
+                int dst = dstIdx + 3 + v;
+                memcpy(&geom->positions[dst * 3], &gImmediateModeBuffer.positions[src * 3], 3 * sizeof(GLfloat));
+                memcpy(&geom->normals[dst * 3], &gImmediateModeBuffer.normals[src * 3], 3 * sizeof(GLfloat));
+                memcpy(&geom->colors[dst * 4], &gImmediateModeBuffer.colors[src * 4], 4 * sizeof(GLfloat));
+                memcpy(&geom->texCoords0[dst * 2], &gImmediateModeBuffer.texCoords[src * 2], 2 * sizeof(GLfloat));
+                memcpy(&geom->texCoords1[dst * 2], &gImmediateModeBuffer.texCoords[src * 2], 2 * sizeof(GLfloat));
+            }
+        }
+
+        ModernGL_DrawGeometry(geom, drawMode);
+        ModernGL_FreeGeometry(geom);
+    }
+    // Convert GL_LINE_LOOP to GL_LINE_STRIP (add first vertex at end)
+    else if (gImmediateModeBuffer.mode == GL_LINE_LOOP)
+    {
+        numVertices = gImmediateModeBuffer.vertexCount + 1;
+        drawMode = GL_LINE_STRIP;
+
+        ModernGLGeometry* geom = ModernGL_CreateGeometry(numVertices, 0, true);
+
+        // Copy all vertices
+        memcpy(geom->positions, gImmediateModeBuffer.positions, gImmediateModeBuffer.vertexCount * 3 * sizeof(GLfloat));
+        memcpy(geom->normals, gImmediateModeBuffer.normals, gImmediateModeBuffer.vertexCount * 3 * sizeof(GLfloat));
+        memcpy(geom->colors, gImmediateModeBuffer.colors, gImmediateModeBuffer.vertexCount * 4 * sizeof(GLfloat));
+        memcpy(geom->texCoords0, gImmediateModeBuffer.texCoords, gImmediateModeBuffer.vertexCount * 2 * sizeof(GLfloat));
+        memcpy(geom->texCoords1, gImmediateModeBuffer.texCoords, gImmediateModeBuffer.vertexCount * 2 * sizeof(GLfloat));
+
+        // Add first vertex at end to close the loop
+        int lastIdx = gImmediateModeBuffer.vertexCount;
+        memcpy(&geom->positions[lastIdx * 3], &gImmediateModeBuffer.positions[0], 3 * sizeof(GLfloat));
+        memcpy(&geom->normals[lastIdx * 3], &gImmediateModeBuffer.normals[0], 3 * sizeof(GLfloat));
+        memcpy(&geom->colors[lastIdx * 4], &gImmediateModeBuffer.colors[0], 4 * sizeof(GLfloat));
+        memcpy(&geom->texCoords0[lastIdx * 2], &gImmediateModeBuffer.texCoords[0], 2 * sizeof(GLfloat));
+        memcpy(&geom->texCoords1[lastIdx * 2], &gImmediateModeBuffer.texCoords[0], 2 * sizeof(GLfloat));
+
+        ModernGL_DrawGeometry(geom, drawMode);
+        ModernGL_FreeGeometry(geom);
+    }
+    // Other modes (GL_TRIANGLES, GL_LINES, GL_LINE_STRIP, etc.) work as-is
+    else
+    {
+        ModernGLGeometry* geom = ModernGL_CreateGeometry(numVertices, 0, true);
+
+        memcpy(geom->positions, gImmediateModeBuffer.positions, numVertices * 3 * sizeof(GLfloat));
+        memcpy(geom->normals, gImmediateModeBuffer.normals, numVertices * 3 * sizeof(GLfloat));
+        memcpy(geom->colors, gImmediateModeBuffer.colors, numVertices * 4 * sizeof(GLfloat));
+        memcpy(geom->texCoords0, gImmediateModeBuffer.texCoords, numVertices * 2 * sizeof(GLfloat));
+        memcpy(geom->texCoords1, gImmediateModeBuffer.texCoords, numVertices * 2 * sizeof(GLfloat));
+
+        ModernGL_DrawGeometry(geom, drawMode);
+        ModernGL_FreeGeometry(geom);
+    }
 }
 
 void ModernGL_ImmediateColor(float r, float g, float b, float a)

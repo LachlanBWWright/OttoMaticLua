@@ -76,6 +76,8 @@ extern "C"
 #include "tga.h"
 #include "menu.h"
 
+// WebGL compatibility layer (must be included after other headers)
+#include "gl_compat.h"
 		/* EXTERNS */
 
 extern	BG3DFileContainer		*gBG3DContainerList[];
