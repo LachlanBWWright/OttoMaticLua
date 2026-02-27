@@ -62,6 +62,10 @@ static void WebGL_GetFloatv(GLenum pname, GLfloat* params)
 // Matrix stack implementation
 #define MATRIX_STACK_DEPTH 32
 
+// Forward declarations
+static void Matrix4x4Identity(float* m);
+static void Matrix4x4Multiply(const float* a, const float* b, float* out);
+
 typedef struct {
     float matrices[MATRIX_STACK_DEPTH][16];
     int depth;
@@ -71,6 +75,18 @@ static MatrixStack gModelViewStack;
 static MatrixStack gProjectionStack;
 static MatrixStack gTextureStack;
 static MatrixStack* gCurrentStack = &gModelViewStack;
+static Boolean gMatrixStacksInitialized = false;
+
+static void EnsureMatrixStacksInitialized(void)
+{
+    if (!gMatrixStacksInitialized)
+    {
+        gMatrixStacksInitialized = true;
+        Matrix4x4Identity(gModelViewStack.matrices[0]);
+        Matrix4x4Identity(gProjectionStack.matrices[0]);
+        Matrix4x4Identity(gTextureStack.matrices[0]);
+    }
+}
 
 static GLenum gCurrentMatrixMode = GL_MODELVIEW;
 static int gCurrentTextureUnit = 0;
@@ -87,18 +103,22 @@ static GLenum gBlendSrc = GL_ONE;
 static GLenum gBlendDst = GL_ZERO;
 static GLboolean gDepthMask = GL_TRUE;
 
-// Helper to multiply two 4x4 matrices
+// Helper to multiply two 4x4 column-major matrices: out = a * b
+// OpenGL stores matrices in column-major order: element (row, col) is at index [col*4+row].
+// So for C = A * B: C(row,col) = sum_k A(row,k) * B(k,col)
+//                  = sum_k a[k*4+row] * b[col*4+k]
 static void Matrix4x4Multiply(const float* a, const float* b, float* out)
 {
-    for (int i = 0; i < 4; i++)
+    for (int col = 0; col < 4; col++)
     {
-        for (int j = 0; j < 4; j++)
+        for (int row = 0; row < 4; row++)
         {
-            out[i * 4 + j] = 0;
+            float sum = 0;
             for (int k = 0; k < 4; k++)
             {
-                out[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j];
+                sum += a[k * 4 + row] * b[col * 4 + k];
             }
+            out[col * 4 + row] = sum;
         }
     }
 }
@@ -373,6 +393,7 @@ void CompatGL_ActiveTexture(GLenum texture)
 
 void CompatGL_MatrixMode(GLenum mode)
 {
+    EnsureMatrixStacksInitialized();
     gCurrentMatrixMode = mode;
 
     switch (mode)
@@ -516,7 +537,10 @@ void CompatGL_Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top
 
 void CompatGL_UpdateShaderState(void)
 {
+    EnsureMatrixStacksInitialized();
     extern ModernGLState gModernGLState;
+    extern float gGlobalTransparency;
+    extern OGLColorRGB gGlobalColorFilter;
 
     // Compute MVP matrix
     float mvp[16];
@@ -540,6 +564,12 @@ void CompatGL_UpdateShaderState(void)
     // Sync GL_TEXTURE_2D state to shader texture flags
     gModernGLState.useTexture0 = gTexture2DEnabled[0];
     gModernGLState.useTexture1 = gTexture2DEnabled[1];
+
+    // Sync game global transparency & color filter to shader state
+    gModernGLState.globalTransparency = gGlobalTransparency;
+    gModernGLState.globalColorFilter[0] = gGlobalColorFilter.r;
+    gModernGLState.globalColorFilter[1] = gGlobalColorFilter.g;
+    gModernGLState.globalColorFilter[2] = gGlobalColorFilter.b;
 
     // Update fog state
     ModernGL_SetFog(gFogEnabled, gModernGLState.fogMode, gModernGLState.fogStart,

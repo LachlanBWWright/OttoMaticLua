@@ -217,6 +217,7 @@ static void ConvertVertexArraysToVBO(int vertexCount)
 
 void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
+
     // Sync vertex color state to shader
     extern ModernGLState gModernGLState;
     gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;

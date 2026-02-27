@@ -76,4 +76,11 @@ void CompatGL_GetBooleanv(GLenum pname, GLboolean* params);
 #define glBlendFunc CompatGL_BlendFunc
 #define glDepthMask CompatGL_DepthMask
 
+// Also redirect the ARB suffixed variants that the game uses via function
+// pointers (defined in ogl_functions.h as procptr_glActiveTextureARB etc.)
+// so that they go through the compat layer's texture-unit tracking instead
+// of bypassing it.
+#undef glActiveTextureARB
+#define glActiveTextureARB CompatGL_ActiveTexture
+
 #endif // __EMSCRIPTEN__

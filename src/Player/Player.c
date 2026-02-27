@@ -291,6 +291,12 @@ Boolean PlayerLoseHealth(float damage, Byte deathType)
 {
 Boolean	killed = false;
 
+#ifdef __EMSCRIPTEN__
+	extern int IsGodModeActive(void);
+	if (IsGodModeActive())
+		return false;
+#endif
+
 	if (gPlayerInfo.health < 0.0f)				// see if already dead
 		return(true);
 

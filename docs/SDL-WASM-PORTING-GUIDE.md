@@ -219,6 +219,22 @@ When implementing a custom GL compat layer with `-sFULL_ES2=1`, you must manuall
 
 6. **Indexed draw safety**: When converting `glDrawElements` to non-indexed draws, compute `maxIndex` from the index array and use that (not `count`) to convert the source vertex arrays. Using `count` directly causes out-of-bounds reads when `count` (number of indices) exceeds the number of source vertices.
 
+7. **Column-major matrix multiplication**: OpenGL stores matrices in **column-major** order (element `(row, col)` is at index `col*4+row`). If your compat layer emulates the matrix stack (`glPushMatrix`/`glPopMatrix`/`glMultMatrixf` etc.) and computes the MVP matrix for shaders, the matrix multiply **must** use column-major indexing. A common bug is using a row-major multiply loop:
+   ```c
+   // WRONG — row-major multiply on column-major data gives b*a instead of a*b
+   out[i*4+j] += a[i*4+k] * b[k*4+j];
+   ```
+   The correct loop for column-major `out = a * b` is:
+   ```c
+   // CORRECT — column-major multiply: C(row,col) = sum_k A(row,k) * B(k,col)
+   out[col*4+row] += a[k*4+row] * b[col*4+k];
+   ```
+   Getting this wrong means `MVP = ModelView * Projection` instead of `MVP = Projection * ModelView`. All 3D geometry ends up transformed to completely wrong clip-space coordinates and is invisible — you see UI (drawn with identity matrices) but **zero** 3D geometry.
+
+8. **Sync game globals to shader state**: If the game uses global variables for transparency (`gGlobalTransparency`) or color filters (`gGlobalColorFilter`), these must be synced into the shader uniform state before every draw call. Forgetting this means effects like object fade-in/fade-out, lens flare transparency, and color tinting won't work — they'll always use the initial values (typically 1.0 / white).
+
+9. **`glActiveTextureARB` vs `glActiveTexture` macro coverage**: Many legacy games define `glActiveTextureARB` as a function pointer (`procptr_glActiveTextureARB`) via a header like `ogl_functions.h`. If your compat layer only macro-redirects `glActiveTexture` → `CompatGL_ActiveTexture`, calls to `glActiveTextureARB` bypass the compat layer's texture-unit tracking. Fix: also `#undef glActiveTextureARB` and `#define glActiveTextureARB CompatGL_ActiveTexture` in your compat header (which must be included **after** the function-pointer header). Without this, `gCurrentTextureUnit` never updates, and per-unit `GL_TEXTURE_2D` enable/disable tracking breaks.
+
 ### WebGL Texture Format Restrictions
 
 WebGL only supports a small set of `format`/`type` combinations for `glTexImage2D`:
@@ -477,6 +493,7 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 | `function signature mismatch` | ABI mismatch in exception handling | Ensure all TUs use same exception flags |
 | `Cannot enlarge memory arrays` | Heap too small | Set `ALLOW_MEMORY_GROWTH=1` and increase `INITIAL_MEMORY` |
 | Black screen, no GL errors | GL context not created | Check `SDL_GL_CONTEXT_PROFILE_ES` is set |
+| 3D geometry invisible, UI works | MVP matrix wrong (column-major multiply bug) | Ensure matrix multiply uses column-major indexing: `out[col*4+row] += a[k*4+row] * b[col*4+k]` |
 | `WARNING: using emscripten GL emulation` | `LEGACY_GL_EMULATION=1` active | Switch to `FULL_ES2=1` if using a custom GL compat layer. Only use `LEGACY_GL_EMULATION` if you have no custom layer. |
 | Black screen with custom compat layer | `LEGACY_GL_EMULATION` conflicts with custom layer | Remove `LEGACY_GL_EMULATION`, use `FULL_ES2=1` instead |
 | `texImage2D: invalid internalformat` | Desktop-only internalFormat (e.g. `GL_RGB5_A1` with `GL_UNSIGNED_BYTE`) | Add format conversion; force `internalFormat == format` for `GL_UNSIGNED_BYTE` data |
@@ -542,6 +559,10 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 18. **Missing `glTexCoord2fv` and similar variants**: `FULL_ES2` does not provide any legacy GL functions. Every variant (`glTexCoord2fv`, `glVertex3fv`, `glColor4fv`, `glNormal3fv`, etc.) must be macro-redirected in your compat layer. Missing even one will cause linker errors like `undefined symbol: glTexCoord2fv`.
 19. **Per-texture-unit state tracking**: Desktop OpenGL tracks `GL_TEXTURE_2D` enable/disable per texture unit. A compat layer must do the same — use an array indexed by the active texture unit (set via `glActiveTexture`). Failing to do this causes textures to not appear (useTexture0/useTexture1 shader uniforms stuck at false).
 20. **`GL_RGB5_A1` as internalFormat with `GL_UNSIGNED_BYTE`**: Desktop OpenGL silently accepts `glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB5_A1, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, data)` and converts on the fly. WebGL rejects this with `INVALID_VALUE`. Always add a catch-all in your texture conversion function to force `internalFormat == format` when `type` is `GL_UNSIGNED_BYTE`.
+21. **Column-major matrix multiply in compat layer**: When emulating the OpenGL matrix stack, the matrix multiply function **must** account for column-major storage. Using a naive `out[i*4+j] += a[i*4+k] * b[k*4+j]` loop computes the wrong matrix product (`b*a` instead of `a*b` for column-major data). This causes the MVP matrix to be wrong (`ModelView * Projection` instead of `Projection * ModelView`), making all 3D geometry invisible while 2D/UI elements (drawn with identity matrices) still appear. See [Custom Compat Layer: Key State Tracking Requirements](#custom-compat-layer-key-state-tracking-requirements) item 7.
+22. **Game globals not synced to shader uniforms**: If a game uses C globals for transparency/color filter values and your shader has corresponding uniforms, you must copy the globals into the shader state struct before every draw call. Without this, shader-side transparency and color filtering always use their initial values (1.0 / white) regardless of what the game code sets.
+23. **`glActiveTextureARB` bypassing compat layer**: Legacy games often define `glActiveTextureARB` as a function pointer macro. If your compat layer only redirects `glActiveTexture`, calls to `glActiveTextureARB` bypass texture-unit tracking entirely. The fix is to `#undef` and `#define` the ARB variant in the compat header as well. See item 9 under Key State Tracking Requirements.
+24. **Zero-initialized matrix stacks break texture sampling**: In C, `static` matrix stacks are zero-initialized. If you have a texture matrix stack, its initial value will be the all-zeros matrix, not the identity matrix. When a shader transforms UVs with `texCoord = uTextureMatrix * vec4(uv, 0, 1)`, all texture coordinates collapse to `(0,0)`, causing every pixel to sample the corner texel. Models appear untextured (solid material color only) even though textures are correctly bound and `useTexture0` is true. Fix: ensure all matrix stacks (modelview, projection, **and texture**) are initialized to the identity matrix before first use.
 
 ---
 
