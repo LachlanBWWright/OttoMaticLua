@@ -9,6 +9,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include "modern_gl.h"
+#include "vertex_array_compat.h"
 
 // Immediate mode emulation
 #define glBegin(mode) ModernGL_BeginImmediateMode(mode)
@@ -25,5 +26,10 @@
 // GL_QUADS not supported in WebGL - need to convert to triangles
 // This is handled in the immediate mode implementation
 // For GL_QUADS: vertices 0,1,2,3 become triangles 0,1,2 and 0,2,3
+
+// Client-side vertex arrays
+// These are redirected via vertex_array_compat.h which defines the macros:
+// glEnableClientState, glDisableClientState, glVertexPointer, glNormalPointer,
+// glColorPointer, glTexCoordPointer, glDrawElements, glDrawArrays
 
 #endif // __EMSCRIPTEN__
