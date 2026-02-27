@@ -1385,7 +1385,14 @@ GLenum _OGL_CheckError(const char* file, const int line)
 	{
 		static char buf[256];
 		SDL_snprintf(buf, 256, "OpenGL Error 0x%x in %s:%d", error, file, line);
+#ifdef __EMSCRIPTEN__
+		// On Emscripten with LEGACY_GL_EMULATION, some GL errors are harmless
+		// (e.g. unsupported enums that the emulation layer doesn't handle).
+		// Log a warning instead of crashing.
+		SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
+#else
 		DoFatalAlert(buf);
+#endif
 	}
 	return error;
 }
