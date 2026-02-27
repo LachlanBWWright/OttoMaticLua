@@ -193,12 +193,15 @@ void OGL_SetupWindow(OGLSetupInputType *setupDefPtr)
 
 				/* SETUP */
 
+	SDL_Log("OGL_SetupWindow: InitDrawContext...");
 	OGL_InitDrawContext(&setupDefPtr->view);
 	OGL_CheckError();
 
+	SDL_Log("OGL_SetupWindow: SetStyles...");
 	OGL_SetStyles(setupDefPtr);
 	OGL_CheckError();
 
+	SDL_Log("OGL_SetupWindow: CreateLights...");
 	OGL_CreateLights(&setupDefPtr->lights);
 	OGL_CheckError();
 
@@ -393,7 +396,9 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 	glDisable(GL_RESCALE_NORMAL);
 
+#ifndef __EMSCRIPTEN__
     glHint(GL_FOG_HINT, GL_NICEST);		// pixel accurate fog?
+#endif
 
 	OGL_CheckError();
 
@@ -405,7 +410,9 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 		/* SET FOG */
 
+#ifndef __EMSCRIPTEN__
 	glHint(GL_FOG_HINT, GL_FASTEST);
+#endif
 
 	if (styleDefPtr->useFog)
 	{
@@ -1378,7 +1385,14 @@ GLenum _OGL_CheckError(const char* file, const int line)
 	{
 		static char buf[256];
 		SDL_snprintf(buf, 256, "OpenGL Error 0x%x in %s:%d", error, file, line);
+#ifdef __EMSCRIPTEN__
+		// On Emscripten with LEGACY_GL_EMULATION, some GL errors are harmless
+		// (e.g. unsupported enums that the emulation layer doesn't handle).
+		// Log a warning instead of crashing.
+		SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
+#else
 		DoFatalAlert(buf);
+#endif
 	}
 	return error;
 }

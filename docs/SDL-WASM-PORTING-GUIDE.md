@@ -362,6 +362,8 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 | `Cannot enlarge memory arrays` | Heap too small | Set `ALLOW_MEMORY_GROWTH=1` and increase `INITIAL_MEMORY` |
 | Black screen, no GL errors | GL context not created | Check `SDL_GL_CONTEXT_PROFILE_ES` is set |
 | `WARNING: using emscripten GL emulation` | `LEGACY_GL_EMULATION=1` active | Expected warning; safe to ignore if game renders correctly |
+| Infinite hang at GL initialization | `glEnable`/`glDisable` macro recursion | `#undef` the macros in the compat `.c` file before the function implementations |
+| `InternalError: too much recursion` | Compat layer calls itself via macro | Same as above—ensure default/passthrough cases call the real GL function |
 
 ### Browser Developer Tools
 
@@ -409,6 +411,11 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 5. **Assuming filesystem access**: All file I/O goes through Emscripten's virtual FS.
 6. **Not testing with different browsers**: WebGL support varies between Chrome, Firefox, and Safari.
 7. **Forgetting to set exception flags globally**: All translation units (including libraries like Pomme, SDL) must use the same exception-handling ABI.
+8. **Macro-redirect recursion in GL compatibility layers**: When using `#define glEnable CompatGL_Enable` to intercept legacy GL calls, the compat implementation itself must NOT call `glEnable` in its default/passthrough case—that would recurse infinitely via the same macro. Fix: `#undef glEnable` at the top of the `.c` file that implements `CompatGL_Enable`, so the default case calls the real Emscripten-provided `glEnable`.
+9. **Dual GL emulation conflict**: When both a custom GL compatibility layer AND Emscripten's `LEGACY_GL_EMULATION=1` are active, they can conflict. Ensure macros intercept all relevant calls before they reach Emscripten's emulation, and that non-intercepted calls properly fall through to Emscripten's implementations.
+10. **Unsupported GL state enums**: WebGL does not support `glEnable/glDisable` with `GL_NORMALIZE`, `GL_RESCALE_NORMAL`, `GL_COLOR_MATERIAL`, `GL_TEXTURE_GEN_S/T`, or `GL_ALPHA_TEST`. A compat layer must catch these and handle them (e.g., track state internally for shader use, or silently ignore).
+11. **`glIsEnabled` and `glGetFloatv` for emulated states**: When emulating `glEnable/glDisable` for unsupported states, also wrap `glIsEnabled` and `glGetFloatv(GL_CURRENT_COLOR, ...)` so push/pop state functions can query the emulated state correctly.
+12. **`glPolygonMode` and `glHint(GL_FOG_HINT)`**: These don't exist in WebGL/GLES2. Redirect to no-ops.
 
 ---
 
