@@ -8,7 +8,6 @@
 #include "game.h"
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
 #include <emscripten/emscripten.h>
 
 // IMPORTANT: #undef macros that this file implements, so the default/passthrough

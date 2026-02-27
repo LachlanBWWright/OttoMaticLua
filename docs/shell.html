@@ -253,7 +253,7 @@
         <code>OttoMatic_SetGodMode(0 | 1)</code>
       </div>
       <div class="api-row">
-        <label>Speed multiplier</label>
+        <label for="speed-mult">Speed multiplier</label>
         <input type="number" id="speed-mult" value="1.0" min="0.1" max="10" step="0.5" style="width:5em">
         <button class="btn" onclick="applySpeed()">Apply</button>
         <code>OttoMatic_SetSpeedMultiplier(float)</code>
@@ -264,16 +264,16 @@
     <div class="api-section">
       <h3>Warp &amp; Navigation</h3>
       <div class="api-row">
-        <label>Skip to level (0–9)</label>
+        <label for="warp-level">Skip to level (0–9)</label>
         <input type="number" id="warp-level" value="0" min="0" max="9" style="width:4em">
         <button class="btn" onclick="skipToLevel()">Go</button>
         <code>OttoMatic_SkipToLevel(int)</code>
       </div>
       <div class="api-row">
-        <label>Teleport player</label>
-        <input type="number" id="warp-x" placeholder="X" style="width:5em">
-        <input type="number" id="warp-y" placeholder="Y" style="width:5em">
-        <input type="number" id="warp-z" placeholder="Z" style="width:5em">
+        <label for="warp-x">Teleport player</label>
+        <input type="number" id="warp-x" placeholder="X" aria-label="X coordinate" style="width:5em">
+        <input type="number" id="warp-y" placeholder="Y" aria-label="Y coordinate" style="width:5em">
+        <input type="number" id="warp-z" placeholder="Z" aria-label="Z coordinate" style="width:5em">
         <button class="btn" onclick="warpToCoord()">Warp</button>
       </div>
       <div class="api-row">
@@ -287,17 +287,17 @@
     <div class="api-section">
       <h3>Terrain Override</h3>
       <div class="api-row">
-        <label>Terrain file path</label>
+        <label for="terrain-path">Terrain file path</label>
         <input type="text" id="terrain-path" placeholder="/Data/Terrain/Level1.ter">
         <button class="btn" onclick="applyTerrain()">Apply</button>
       </div>
       <div class="api-row">
-        <label>Upload .ter file</label>
+        <label for="ter-upload">Upload .ter file</label>
         <input type="file" id="ter-upload" accept=".ter" style="font-size:0.85em">
         <button class="btn" onclick="uploadTerrainFile()">Upload &amp; Apply</button>
       </div>
       <div class="api-row">
-        <label>Upload .ter.rsrc file</label>
+        <label for="ter-rsrc-upload">Upload .ter.rsrc file</label>
         <input type="file" id="ter-rsrc-upload" accept=".rsrc" style="font-size:0.85em">
         <button class="btn" onclick="uploadTerrainRsrcFile()">Upload</button>
       </div>
