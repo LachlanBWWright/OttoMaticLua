@@ -7,7 +7,6 @@
 
 #include "game.h"
 #include <string.h>
-#include <stdio.h>
 
 VertexArrayState gVertexArrayState;
 static int gCurrentClientTexture = 0; // 0 or 1 for GL_TEXTURE0 or GL_TEXTURE1
@@ -218,21 +217,6 @@ static void ConvertVertexArraysToVBO(int vertexCount)
 
 void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
-    static int sDrawCallCount = 0;
-    sDrawCallCount++;
-
-    // Log first few draw calls for diagnostic purposes
-    if (sDrawCallCount <= 3)
-    {
-        printf("[CompatGL] DrawElements #%d: mode=0x%x count=%d type=0x%x\n",
-               sDrawCallCount, mode, count, type);
-        printf("[CompatGL]   vertexArray=%d normalArray=%d colorArray=%d texCoord0=%d texCoord1=%d\n",
-               gVertexArrayState.vertexArrayEnabled,
-               gVertexArrayState.normalArrayEnabled,
-               gVertexArrayState.colorArrayEnabled,
-               gVertexArrayState.texCoordArrayEnabled[0],
-               gVertexArrayState.texCoordArrayEnabled[1]);
-    }
 
     // Sync vertex color state to shader
     extern ModernGLState gModernGLState;

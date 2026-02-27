@@ -8,6 +8,7 @@
 #include "game.h"
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 #include <emscripten/emscripten.h>
 
 // IMPORTANT: #undef macros that this file implements, so the default/passthrough
@@ -62,6 +63,10 @@ static void WebGL_GetFloatv(GLenum pname, GLfloat* params)
 // Matrix stack implementation
 #define MATRIX_STACK_DEPTH 32
 
+// Forward declarations
+static void Matrix4x4Identity(float* m);
+static void Matrix4x4Multiply(const float* a, const float* b, float* out);
+
 typedef struct {
     float matrices[MATRIX_STACK_DEPTH][16];
     int depth;
@@ -71,6 +76,18 @@ static MatrixStack gModelViewStack;
 static MatrixStack gProjectionStack;
 static MatrixStack gTextureStack;
 static MatrixStack* gCurrentStack = &gModelViewStack;
+static Boolean gMatrixStacksInitialized = false;
+
+static void EnsureMatrixStacksInitialized(void)
+{
+    if (!gMatrixStacksInitialized)
+    {
+        gMatrixStacksInitialized = true;
+        Matrix4x4Identity(gModelViewStack.matrices[0]);
+        Matrix4x4Identity(gProjectionStack.matrices[0]);
+        Matrix4x4Identity(gTextureStack.matrices[0]);
+    }
+}
 
 static GLenum gCurrentMatrixMode = GL_MODELVIEW;
 static int gCurrentTextureUnit = 0;
@@ -377,6 +394,7 @@ void CompatGL_ActiveTexture(GLenum texture)
 
 void CompatGL_MatrixMode(GLenum mode)
 {
+    EnsureMatrixStacksInitialized();
     gCurrentMatrixMode = mode;
 
     switch (mode)
@@ -520,6 +538,7 @@ void CompatGL_Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top
 
 void CompatGL_UpdateShaderState(void)
 {
+    EnsureMatrixStacksInitialized();
     extern ModernGLState gModernGLState;
     extern float gGlobalTransparency;
     extern OGLColorRGB gGlobalColorFilter;
