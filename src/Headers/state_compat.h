@@ -33,6 +33,8 @@ void CompatGL_Rotate(GLfloat angle, GLfloat x, GLfloat y, GLfloat z);
 void CompatGL_Scale(GLfloat x, GLfloat y, GLfloat z);
 void CompatGL_Frustum(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near, GLdouble far);
 void CompatGL_Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near, GLdouble far);
+void CompatGL_BlendFunc(GLenum sfactor, GLenum dfactor);
+void CompatGL_DepthMask(GLboolean flag);
 
 // Update shader uniforms before drawing
 void CompatGL_UpdateShaderState(void);
@@ -40,6 +42,8 @@ void CompatGL_UpdateShaderState(void);
 // State queries for emulated GL states
 GLboolean CompatGL_IsEnabled(GLenum cap);
 void CompatGL_GetFloatv(GLenum pname, GLfloat* params);
+void CompatGL_GetIntegerv(GLenum pname, GLint* params);
+void CompatGL_GetBooleanv(GLenum pname, GLboolean* params);
 
 // Macro redirects for state functions
 #define glEnable CompatGL_Enable
@@ -67,5 +71,9 @@ void CompatGL_GetFloatv(GLenum pname, GLfloat* params);
 #define glOrtho CompatGL_Ortho
 #define glIsEnabled CompatGL_IsEnabled
 #define glGetFloatv CompatGL_GetFloatv
+#define glGetIntegerv CompatGL_GetIntegerv
+#define glGetBooleanv CompatGL_GetBooleanv
+#define glBlendFunc CompatGL_BlendFunc
+#define glDepthMask CompatGL_DepthMask
 
 #endif // __EMSCRIPTEN__

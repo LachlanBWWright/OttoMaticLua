@@ -675,6 +675,9 @@ void ModernGL_EndImmediateMode(void)
     if (gImmediateModeBuffer.vertexCount == 0)
         return;
 
+    // Immediate mode always has per-vertex color baked in
+    gModernGLState.useVertexColor = true;
+
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
     CompatGL_UpdateShaderState();

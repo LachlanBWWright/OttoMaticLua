@@ -217,6 +217,10 @@ static void ConvertVertexArraysToVBO(int vertexCount)
 
 void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
+    // Sync vertex color state to shader
+    extern ModernGLState gModernGLState;
+    gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;
+
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
     CompatGL_UpdateShaderState();
@@ -228,13 +232,19 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
     {
         const GLuint* idx = (const GLuint*)indices;
 
-        // Create expanded vertex arrays
-        int expandedCount = count;
-        ConvertVertexArraysToVBO(expandedCount);
+        // Find the maximum index to know how many source vertices to convert
+        GLuint maxIdx = 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (idx[i] > maxIdx) maxIdx = idx[i];
+        }
+
+        // Convert source vertex arrays (maxIdx+1 vertices needed)
+        ConvertVertexArraysToVBO(maxIdx + 1);
 
         // Expand vertices based on indices
         ModernGLGeometry* src = gVertexArrayState.geometry;
-        ModernGLGeometry* expanded = ModernGL_CreateGeometry(expandedCount, 0, true);
+        ModernGLGeometry* expanded = ModernGL_CreateGeometry(count, 0, true);
 
         for (int i = 0; i < count; i++)
         {
@@ -253,6 +263,10 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
 
 void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
 {
+    // Sync vertex color state to shader
+    extern ModernGLState gModernGLState;
+    gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;
+
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
     CompatGL_UpdateShaderState();

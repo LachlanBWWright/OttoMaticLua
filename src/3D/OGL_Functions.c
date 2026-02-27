@@ -8,12 +8,12 @@ PFNGLCLIENTACTIVETEXTUREARBPROC		procptr_glClientActiveTextureARB	= NULL;
 
 #ifdef __EMSCRIPTEN__
 // WebGL doesn't support glClientActiveTexture because it's part of the legacy
-// fixed-function pipeline. The modern GL system replaces client-side vertex arrays
-// with VBOs and shader-based rendering, making this function unnecessary.
-// This no-op function is provided only for API compatibility with legacy code paths.
-static void glClientActiveTexture_noop(GLenum texture)
+// fixed-function pipeline. However, we need to route it to the vertex array
+// compat layer so it tracks which texture unit is active for tex coord pointers.
+static void glClientActiveTexture_compat(GLenum texture)
 {
-	(void)texture;  // No-op: Modern GL uses VBOs with vertex attributes
+	extern void CompatGL_ClientActiveTexture(GLenum texture);
+	CompatGL_ClientActiveTexture(texture);
 }
 #endif
 
@@ -39,8 +39,8 @@ void OGL_InitFunctions(void)
 #ifdef __EMSCRIPTEN__
 	// WebGL/Emscripten doesn't provide glClientActiveTexture
 	// Modern GL rendering path doesn't need this function
-	procptr_glClientActiveTextureARB = (PFNGLCLIENTACTIVETEXTUREARBPROC) glClientActiveTexture_noop;
-	SDL_Log("OGL_InitFunctions: Using no-op glClientActiveTexture for WebGL");
+	procptr_glClientActiveTextureARB = (PFNGLCLIENTACTIVETEXTUREARBPROC) glClientActiveTexture_compat;
+	SDL_Log("OGL_InitFunctions: Using compat glClientActiveTexture for WebGL");
 #else
 	procptr_glClientActiveTextureARB = (PFNGLCLIENTACTIVETEXTUREARBPROC) SDL_GL_GetProcAddress("glClientActiveTextureARB");
 	if (!procptr_glClientActiveTextureARB)

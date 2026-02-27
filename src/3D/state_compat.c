@@ -17,6 +17,11 @@
 #undef glDisable
 #undef glIsEnabled
 #undef glGetFloatv
+#undef glGetIntegerv
+#undef glGetBooleanv
+#undef glBlendFunc
+#undef glDepthMask
+#undef glDepthMask
 
 // ── Direct WebGL calls ────────────────────────────────────────────────────────
 // When LEGACY_GL_EMULATION is active, Emscripten hooks glEnable/glDisable with
@@ -73,10 +78,15 @@ static int gCurrentTextureUnit = 0;
 static Boolean gLightingEnabled = false;
 static Boolean gFogEnabled = false;
 static Boolean gAlphaTestEnabled = false;
-static Boolean gTexture2DEnabled = false;
+static Boolean gTexture2DEnabled[2] = {false, false}; // Per texture unit
 static Boolean gNormalizeEnabled = false;
 static int gAlphaFunc = 7; // GL_ALWAYS
 static float gAlphaRef = 0.0f;
+
+// Track blend func state for glGetIntegerv compat
+static GLenum gBlendSrc = GL_ONE;
+static GLenum gBlendDst = GL_ZERO;
+static GLboolean gDepthMask = GL_TRUE;
 
 // Helper to multiply two 4x4 matrices
 static void Matrix4x4Multiply(const float* a, const float* b, float* out)
@@ -116,7 +126,8 @@ void CompatGL_Enable(GLenum cap)
             gAlphaTestEnabled = true;
             break;
         case GL_TEXTURE_2D:
-            gTexture2DEnabled = true;
+            if (gCurrentTextureUnit >= 0 && gCurrentTextureUnit < 2)
+                gTexture2DEnabled[gCurrentTextureUnit] = true;
             break;
 
         // States that don't exist in WebGL/GLES2 — silently ignore
@@ -166,7 +177,8 @@ void CompatGL_Disable(GLenum cap)
             gAlphaTestEnabled = false;
             break;
         case GL_TEXTURE_2D:
-            gTexture2DEnabled = false;
+            if (gCurrentTextureUnit >= 0 && gCurrentTextureUnit < 2)
+                gTexture2DEnabled[gCurrentTextureUnit] = false;
             break;
 
         // States that don't exist in WebGL/GLES2 — silently ignore
@@ -175,9 +187,15 @@ void CompatGL_Disable(GLenum cap)
             break;
         case GL_RESCALE_NORMAL:
         case GL_COLOR_MATERIAL:
+            break;
         case GL_TEXTURE_GEN_S:
         case GL_TEXTURE_GEN_T:
+        {
+            // Reset sphere map when texture generation is disabled
+            extern ModernGLState gModernGLState;
+            gModernGLState.useSphereMap = false;
             break;
+        }
 
         // Lights — we don't truly disable them in the shader, but stop tracking
         case GL_LIGHT0:
@@ -520,6 +538,10 @@ void CompatGL_UpdateShaderState(void)
     // Update texture matrix
     ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
 
+    // Sync GL_TEXTURE_2D state to shader texture flags
+    gModernGLState.useTexture0 = gTexture2DEnabled[0];
+    gModernGLState.useTexture1 = gTexture2DEnabled[1];
+
     // Update fog state
     ModernGL_SetFog(gFogEnabled, gModernGLState.fogMode, gModernGLState.fogStart,
                     gModernGLState.fogEnd, gModernGLState.fogDensity,
@@ -540,7 +562,7 @@ GLboolean CompatGL_IsEnabled(GLenum cap)
         case GL_LIGHTING:       return gLightingEnabled;
         case GL_FOG:            return gFogEnabled;
         case GL_ALPHA_TEST:     return gAlphaTestEnabled;
-        case GL_TEXTURE_2D:     return gTexture2DEnabled;
+        case GL_TEXTURE_2D:     return (gCurrentTextureUnit >= 0 && gCurrentTextureUnit < 2) ? gTexture2DEnabled[gCurrentTextureUnit] : false;
         case GL_NORMALIZE:      return gNormalizeEnabled;
         case GL_RESCALE_NORMAL: return false;
         case GL_COLOR_MATERIAL: return false;
@@ -565,6 +587,50 @@ void CompatGL_GetFloatv(GLenum pname, GLfloat* params)
             break;
         default:
             WebGL_GetFloatv(pname, params);
+            break;
+    }
+}
+
+void CompatGL_BlendFunc(GLenum sfactor, GLenum dfactor)
+{
+    gBlendSrc = sfactor;
+    gBlendDst = dfactor;
+    glBlendFunc(sfactor, dfactor);
+}
+
+void CompatGL_DepthMask(GLboolean flag)
+{
+    gDepthMask = flag;
+    glDepthMask(flag);
+}
+
+void CompatGL_GetIntegerv(GLenum pname, GLint* params)
+{
+    switch (pname)
+    {
+        case GL_BLEND_SRC:
+        case GL_BLEND_SRC_ALPHA:
+            params[0] = (GLint)gBlendSrc;
+            break;
+        case GL_BLEND_DST:
+        case GL_BLEND_DST_ALPHA:
+            params[0] = (GLint)gBlendDst;
+            break;
+        default:
+            glGetIntegerv(pname, params);
+            break;
+    }
+}
+
+void CompatGL_GetBooleanv(GLenum pname, GLboolean* params)
+{
+    switch (pname)
+    {
+        case GL_DEPTH_WRITEMASK:
+            params[0] = gDepthMask;
+            break;
+        default:
+            glGetBooleanv(pname, params);
             break;
     }
 }

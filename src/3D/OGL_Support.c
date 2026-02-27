@@ -1483,22 +1483,27 @@ OGLLightDefType	*lights;
 GLenum _OGL_CheckError(const char* file, const int line)
 {
 #ifdef __EMSCRIPTEN__
-	// On Emscripten with LEGACY_GL_EMULATION, the emulation layer's internal
-	// getParameter() calls generate harmless GL_INVALID_ENUM errors that
-	// accumulate in the GL error queue.  Drain them all.
-	// Return 0 so callers' "if (OGL_CheckError()) DoFatalAlert()" patterns
-	// don't crash the game.
-	// Rate-limit logging to avoid flooding the console.
+	// On Emscripten, drain all GL errors. Return 0 so callers'
+	// "if (OGL_CheckError()) DoFatalAlert()" patterns don't crash the game.
+	// Log more verbosely to help diagnose rendering issues.
 	static int sErrorCount = 0;
 	GLenum error;
 	while ((error = glGetError()) != GL_NO_ERROR)
 	{
 		sErrorCount++;
-		if (sErrorCount <= 5 || (sErrorCount % 1000) == 0)
+		if (sErrorCount <= 50 || (sErrorCount % 500) == 0)
 		{
-			static char buf[256];
-			SDL_snprintf(buf, 256, "OpenGL Error 0x%x (ignored on Emscripten, count=%d) in %s:%d",
-			             error, sErrorCount, file, line);
+			const char* errorName = "UNKNOWN";
+			switch (error) {
+				case 0x0500: errorName = "GL_INVALID_ENUM"; break;
+				case 0x0501: errorName = "GL_INVALID_VALUE"; break;
+				case 0x0502: errorName = "GL_INVALID_OPERATION"; break;
+				case 0x0505: errorName = "GL_OUT_OF_MEMORY"; break;
+				case 0x0506: errorName = "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
+			}
+			static char buf[512];
+			SDL_snprintf(buf, 512, "GL Error 0x%x (%s) [total=%d] at %s:%d",
+			             error, errorName, sErrorCount, file, line);
 			SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
 		}
 	}
