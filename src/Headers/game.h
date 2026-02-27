@@ -78,6 +78,18 @@ extern "C"
 
 // WebGL compatibility layer (must be included after other headers)
 #include "gl_compat.h"
+
+// Emscripten browser yield macro.
+// Call this inside long-running while-loops so the browser event loop
+// can process rendering, input, and other events.
+// On non-Emscripten builds this is a no-op.
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#define GAME_YIELD_BROWSER() emscripten_sleep(0)
+#else
+#define GAME_YIELD_BROWSER() ((void)0)
+#endif
+
 		/* EXTERNS */
 
 extern	BG3DFileContainer		*gBG3DContainerList[];

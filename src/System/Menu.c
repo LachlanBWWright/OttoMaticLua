@@ -630,6 +630,7 @@ static void NavigatePadBinding(const MenuItem* entry)
 	{
 		while (GetNeedState(kNeed_UIConfirm))
 		{
+			GAME_YIELD_BROWSER();
 			UpdateInput();
 			SDL_Delay(30);
 		}
@@ -661,6 +662,7 @@ static void NavigateMouseBinding(const MenuItem* entry)
 	{
 		while (GetNeedState(kNeed_UIConfirm))
 		{
+			GAME_YIELD_BROWSER();
 			UpdateInput();
 			SDL_Delay(30);
 		}
@@ -1274,6 +1276,7 @@ int StartMenu(
 
 	while (gMenuState != kMenuStateOff)
 	{
+		GAME_YIELD_BROWSER();
 		UpdateInput();
 
 		if (gMenuStyle->startButtonExits && GetNewNeedState(kNeed_UIStart))

@@ -114,6 +114,8 @@ float	oldTime,maxTime = 11.0f;
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
+
 			/* DRAW STUFF */
 
 		CalcFramesPerSecond();

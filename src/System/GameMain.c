@@ -11,10 +11,6 @@
 
 #include "game.h"
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif
-
 /****************************/
 /*    PROTOTYPES            */
 /****************************/
@@ -271,9 +267,7 @@ static void PlayArea(void)
 				// Also gathers frame rate info for the net clients.
 				//
 
-#ifdef __EMSCRIPTEN__
-		emscripten_sleep(0);			// yield to browser event loop (requires ASYNCIFY)
-#endif
+		GAME_YIELD_BROWSER();			// yield to browser event loop (requires ASYNCIFY)
 
 		UpdateInput();									// read local keys
 
@@ -1047,6 +1041,7 @@ void GameMain(void)
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
 		MyFlushEvents();
 		DoMainMenuScreen();
 

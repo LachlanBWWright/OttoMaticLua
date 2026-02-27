@@ -56,16 +56,15 @@ set(POMME_NO_QD3D		true)
 set(POMME_NO_VIDEO		true)
 add_compile_definitions(POMME_CASE_SENSITIVE_FSSPEC=1)
 
-# Use native WebAssembly exceptions with Emscripten to avoid "function signature
-# mismatch" traps that occur when ASYNCIFY and JS-emulated C++ exceptions interact.
-# This must be set globally (before add_subdirectory calls) so that all compiled
-# translation units — including Pomme — use the same exception-handling ABI.
-# The flag must also be passed at link time so Emscripten selects the
-# exception-capable runtime libraries (libc++ / libc++abi) rather than their
-# no-exception counterparts (libc++-noexcept / libc++abi-noexcept).
+# Enable C++ exception support for Emscripten using the JS-based mechanism
+# (-fexceptions) rather than native WASM exceptions (-fwasm-exceptions).
+# Native WASM exceptions are NOT compatible with ASYNCIFY, which this game
+# requires to yield the browser event loop from blocking C while-loops.
+# The -fexceptions flag must be set globally (before add_subdirectory calls)
+# so that all translation units — including Pomme — use the same ABI.
 if(EMSCRIPTEN)
-	add_compile_options(-fwasm-exceptions)
-	add_link_options(-fwasm-exceptions)
+	add_compile_options(-fexceptions)
+	add_link_options(-fexceptions)
 endif()
 
 #------------------------------------------------------------------------------
@@ -158,14 +157,20 @@ if(EMSCRIPTEN)
 
 	# Emscripten link flags for the WebAssembly build:
 	#   ASYNCIFY              - allows blocking C loops to yield to the browser event loop
+	#   ASYNCIFY_STACK_SIZE   - stack size for asyncify (default 4096 is too small for this game)
 	#   LEGACY_GL_EMULATION   - emulates legacy OpenGL (glBegin/glEnd etc.) via WebGL
 	#   GL_DEBUG              - disable GL emulation debug messages (reduces console noise)
 	#   preload-file          - embed the Data/ folder into the virtual filesystem
 	#   EXPORTED_FUNCTIONS    - export extra C functions callable from JavaScript
-	# Note: WASM exception handling is enabled globally via -fwasm-exceptions (line 64)
-	#       and should not be specified as a linker flag in newer Emscripten versions.
+	#   DISABLE_EXCEPTION_CATCHING - enable JS-based C++ exception support (compatible with ASYNCIFY)
+	# Note: C++ exception handling is enabled via -fexceptions (set globally above).
+	#       The -sDISABLE_EXCEPTION_CATCHING=0 flag enables the JS-based exception
+	#       catching mechanism at link time, which IS compatible with ASYNCIFY
+	#       (unlike -fwasm-exceptions which is NOT compatible with ASYNCIFY).
 	target_link_options(${GAME_TARGET} PRIVATE
 		"SHELL:-sASYNCIFY=1"
+		"SHELL:-sASYNCIFY_STACK_SIZE=65536"
+		"SHELL:-sDISABLE_EXCEPTION_CATCHING=0"
 		"SHELL:-sLEGACY_GL_EMULATION=1"
 		"SHELL:-sGL_DEBUG=0"
 		"SHELL:-sGL_UNSAFE_OPTS=0"
@@ -191,8 +196,8 @@ target_compile_definitions(${GAME_TARGET} PRIVATE
 
 if(NOT MSVC)
 	target_compile_options(${GAME_TARGET} PRIVATE
-		# Skip -fexceptions for Emscripten: the global -fwasm-exceptions flag set
-		# above already provides native WASM exception support for all targets.
+		# Skip -fexceptions for Emscripten: the global -fexceptions flag set
+		# above already provides C++ exception support for all targets.
 		$<$<NOT:$<BOOL:${EMSCRIPTEN}>>:-fexceptions>
 		-Wall
 		-Wextra

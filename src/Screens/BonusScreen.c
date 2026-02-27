@@ -524,6 +524,7 @@ static void DoBonusShipDissolve(void)
 
 	while(gShowScoreMode == SHOW_SCORE_MODE_OFF)
 	{
+		GAME_YIELD_BROWSER();
 		float fps = gFramesPerSecondFrac;
 
 		CalcFramesPerSecond();
@@ -650,6 +651,7 @@ static void DoHumansBonusTally(void)
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
 		float	fps = gFramesPerSecondFrac * gBonusFastForward;
 
 		CalcFramesPerSecond();
@@ -707,6 +709,7 @@ static void DoInventoryBonusTally(void)
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
 		float	fps = gFramesPerSecondFrac * gBonusFastForward;
 
 		CalcFramesPerSecond();
@@ -765,6 +768,7 @@ float	tick;
 
 	while(true)
 	{
+		GAME_YIELD_BROWSER();
 		float	fps = gFramesPerSecondFrac * gBonusFastForward;
 
 		CalcFramesPerSecond();
@@ -886,6 +890,7 @@ static void DoTractorBeam(void)
 
 	while(gBonusBeamTimer < 12.0f)
 	{
+		GAME_YIELD_BROWSER();
 
 		CalcFramesPerSecond();
 		UpdateInput();
