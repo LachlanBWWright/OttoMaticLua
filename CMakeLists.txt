@@ -60,8 +60,12 @@ add_compile_definitions(POMME_CASE_SENSITIVE_FSSPEC=1)
 # mismatch" traps that occur when ASYNCIFY and JS-emulated C++ exceptions interact.
 # This must be set globally (before add_subdirectory calls) so that all compiled
 # translation units — including Pomme — use the same exception-handling ABI.
+# The flag must also be passed at link time so Emscripten selects the
+# exception-capable runtime libraries (libc++ / libc++abi) rather than their
+# no-exception counterparts (libc++-noexcept / libc++abi-noexcept).
 if(EMSCRIPTEN)
 	add_compile_options(-fwasm-exceptions)
+	add_link_options(-fwasm-exceptions)
 endif()
 
 #------------------------------------------------------------------------------

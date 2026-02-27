@@ -2,8 +2,6 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches:
-      - master
   workflow_dispatch:
 
 # Required for OIDC-based Pages deployment
@@ -12,18 +10,15 @@ permissions:
   pages:    write
   id-token: write
 
-# Only one deployment at a time; cancel any in-progress run for the same branch
+# Serialise deployments; allow parallel non-deploy runs on other branches
 concurrency:
-  group: "pages"
+  group: "pages-${{ github.ref }}"
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +26,7 @@ jobs:
 
       # Configure the GitHub Pages environment (sets base URL etc.)
       - name: Setup Pages
+        if: github.ref == 'refs/heads/master'
         uses: actions/configure-pages@v5
 
       # Install Emscripten SDK via git clone to avoid emsdk-update network failures.
@@ -78,8 +74,9 @@ jobs:
       - name: Build WASM
         run: python3 build.py --wasm --build
 
-      # Assemble the GitHub Pages site in _site/
+      # Assemble the GitHub Pages site in _site/ (master branch only)
       - name: Assemble site
+        if: github.ref == 'refs/heads/master'
         run: |
           mkdir -p _site
 
@@ -108,10 +105,20 @@ jobs:
           ls -lh _site/
 
       - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/master'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site/
 
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
