@@ -396,7 +396,9 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 	glDisable(GL_RESCALE_NORMAL);
 
+#ifndef __EMSCRIPTEN__
     glHint(GL_FOG_HINT, GL_NICEST);		// pixel accurate fog?
+#endif
 
 	OGL_CheckError();
 
@@ -408,7 +410,9 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 		/* SET FOG */
 
+#ifndef __EMSCRIPTEN__
 	glHint(GL_FOG_HINT, GL_FASTEST);
+#endif
 
 	if (styleDefPtr->useFog)
 	{
