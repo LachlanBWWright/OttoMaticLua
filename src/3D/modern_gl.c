@@ -7,6 +7,9 @@
 
 #include "game.h"
 #include <string.h>
+#include <stdio.h>
+#include <math.h>
+#include <GLES2/gl2.h>
 
 /****************************/
 /*    GLOBALS               */
