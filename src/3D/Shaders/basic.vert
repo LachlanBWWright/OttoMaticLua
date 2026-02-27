@@ -1,6 +1,8 @@
 // Basic vertex shader for OttoMatic WebGL port
 // Replaces fixed-function vertex processing
 
+precision highp float;
+
 attribute vec3 aPosition;
 attribute vec3 aNormal;
 attribute vec4 aColor;

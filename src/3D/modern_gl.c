@@ -26,6 +26,7 @@ ImmediateModeBuffer gImmediateModeBuffer;
 
 // Vertex shader source (embedded)
 static const char* gVertexShaderSource =
+"precision highp float;\n"
 "attribute vec3 aPosition;\n"
 "attribute vec3 aNormal;\n"
 "attribute vec4 aColor;\n"
