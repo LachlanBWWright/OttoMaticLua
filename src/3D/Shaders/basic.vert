@@ -57,7 +57,11 @@ void main()
     {
         if (uFogMode == 0) // LINEAR
         {
-            vFogFactor = (uFogEnd - fogCoord) / (uFogEnd - uFogStart);
+            float fogRange = uFogEnd - uFogStart;
+            if (abs(fogRange) > 0.001)
+                vFogFactor = (uFogEnd - fogCoord) / fogRange;
+            else
+                vFogFactor = 1.0;
         }
         else if (uFogMode == 1) // EXP
         {
