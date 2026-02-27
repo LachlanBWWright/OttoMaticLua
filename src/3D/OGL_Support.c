@@ -890,9 +890,6 @@ GLuint	textureName;
 	                                                &srcFormat, &destFormat, &dataType);
 	if (convertedPixels)
 		imageMemory = convertedPixels;
-
-	SDL_Log("OGL_TextureMap_Load: %dx%d src=0x%x dest=0x%x type=0x%x",
-	        width, height, srcFormat, destFormat, dataType);
 #endif
 
 			/* GET A UNIQUE TEXTURE NAME & INITIALIZE IT */
