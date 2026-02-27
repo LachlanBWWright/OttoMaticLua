@@ -26,6 +26,7 @@ ImmediateModeBuffer gImmediateModeBuffer;
 
 // Vertex shader source (embedded)
 static const char* gVertexShaderSource =
+"precision highp float;\n"
 "attribute vec3 aPosition;\n"
 "attribute vec3 aNormal;\n"
 "attribute vec4 aColor;\n"
@@ -33,7 +34,7 @@ static const char* gVertexShaderSource =
 "attribute vec2 aTexCoord1;\n"
 "uniform mat4 uMVPMatrix;\n"
 "uniform mat4 uModelViewMatrix;\n"
-"uniform mat3 uNormalMatrix;\n"
+"uniform mediump mat3 uNormalMatrix;\n"
 "uniform vec3 uAmbientLight;\n"
 "uniform vec3 uLightDirection[4];\n"
 "uniform vec3 uLightColor[4];\n"
@@ -59,8 +60,13 @@ static const char* gVertexShaderSource =
 "    vec4 viewPos = uModelViewMatrix * vec4(aPosition, 1.0);\n"
 "    float fogCoord = length(viewPos.xyz);\n"
 "    if (uFogEnabled) {\n"
-"        if (uFogMode == 0)\n"
-"            vFogFactor = (uFogEnd - fogCoord) / (uFogEnd - uFogStart);\n"
+"        if (uFogMode == 0) {\n"
+"            float fogRange = uFogEnd - uFogStart;\n"
+"            if (abs(fogRange) > 0.001)\n"
+"                vFogFactor = (uFogEnd - fogCoord) / fogRange;\n"
+"            else\n"
+"                vFogFactor = 1.0;\n"
+"        }\n"
 "        else if (uFogMode == 1)\n"
 "            vFogFactor = exp(-uFogDensity * fogCoord);\n"
 "        else\n"
@@ -103,7 +109,7 @@ static const char* gFragmentShaderSource =
 "uniform int uMultiTextureMode;\n"
 "uniform int uMultiTextureCombine;\n"
 "uniform bool uUseSphereMap;\n"
-"uniform mat3 uNormalMatrix;\n"
+"uniform mediump mat3 uNormalMatrix;\n"
 "uniform bool uFogEnabled;\n"
 "uniform vec3 uFogColor;\n"
 "uniform bool uAlphaTestEnabled;\n"
@@ -168,9 +174,10 @@ static GLuint CompileShader(GLenum type, const char* source)
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
-        printf("[ModernGL] Shader compilation failed: %s\n", infoLog);
+        char infoLog[1024];
+        glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+        const char* shaderType = (type == GL_VERTEX_SHADER) ? "VERTEX" : "FRAGMENT";
+        printf("[ModernGL] %s shader compilation failed:\n%s\n", shaderType, infoLog);
         return 0;
     }
 
@@ -196,9 +203,21 @@ static GLuint LinkProgram(GLuint vertexShader, GLuint fragmentShader)
     glGetProgramiv(program, GL_LINK_STATUS, &success);
     if (!success)
     {
-        char infoLog[512];
-        glGetProgramInfoLog(program, 512, NULL, infoLog);
-        printf("[ModernGL] Program linking failed: %s\n", infoLog);
+        char infoLog[1024];
+        glGetProgramInfoLog(program, 1024, NULL, infoLog);
+        printf("[ModernGL] Program linking failed:\n%s\n", infoLog);
+
+        // Also validate the program to get more detailed error information
+        glValidateProgram(program);
+        GLint validateStatus;
+        glGetProgramiv(program, GL_VALIDATE_STATUS, &validateStatus);
+        if (!validateStatus)
+        {
+            char validateLog[1024];
+            glGetProgramInfoLog(program, 1024, NULL, validateLog);
+            printf("[ModernGL] Program validation failed:\n%s\n", validateLog);
+        }
+
         return 0;
     }
 
@@ -274,6 +293,9 @@ Boolean ModernGL_LoadShaders(void)
 {
     printf("[ModernGL] Loading shaders...\n");
 
+    // Clear any pending GL errors
+    while (glGetError() != GL_NO_ERROR);
+
     GLuint vertShader = CompileShader(GL_VERTEX_SHADER, gVertexShaderSource);
     if (!vertShader) return false;
 
@@ -289,6 +311,13 @@ Boolean ModernGL_LoadShaders(void)
     glDeleteShader(fragShader);
 
     if (!gModernGLShader.program) return false;
+
+    // Check for GL errors after shader creation
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR)
+    {
+        printf("[ModernGL] GL error after shader creation: 0x%x\n", error);
+    }
 
     // Get attribute locations
     gModernGLShader.aPosition = ATTRIB_LOCATION_POSITION;
@@ -327,6 +356,16 @@ Boolean ModernGL_LoadShaders(void)
     gModernGLShader.uAlphaRef = glGetUniformLocation(gModernGLShader.program, "uAlphaRef");
     gModernGLShader.uGlobalTransparency = glGetUniformLocation(gModernGLShader.program, "uGlobalTransparency");
     gModernGLShader.uGlobalColorFilter = glGetUniformLocation(gModernGLShader.program, "uGlobalColorFilter");
+
+    // Verify critical uniforms were found
+    if (gModernGLShader.uMVPMatrix == -1 || gModernGLShader.uNormalMatrix == -1)
+    {
+        printf("[ModernGL] WARNING: Critical uniforms not found in shader program!\n");
+        if (gModernGLShader.uMVPMatrix == -1)
+            printf("[ModernGL]   - uMVPMatrix not found\n");
+        if (gModernGLShader.uNormalMatrix == -1)
+            printf("[ModernGL]   - uNormalMatrix not found\n");
+    }
 
     printf("[ModernGL] Shaders loaded successfully\n");
     return true;

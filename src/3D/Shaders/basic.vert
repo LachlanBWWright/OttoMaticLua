@@ -1,6 +1,8 @@
 // Basic vertex shader for OttoMatic WebGL port
 // Replaces fixed-function vertex processing
 
+precision highp float;
+
 attribute vec3 aPosition;
 attribute vec3 aNormal;
 attribute vec4 aColor;
@@ -9,7 +11,7 @@ attribute vec2 aTexCoord1;
 
 uniform mat4 uMVPMatrix;        // Combined Model-View-Projection matrix
 uniform mat4 uModelViewMatrix;  // Model-View matrix for lighting calculations
-uniform mat3 uNormalMatrix;     // Normal transformation matrix
+uniform mediump mat3 uNormalMatrix;     // Normal transformation matrix
 
 // Lighting uniforms (up to 4 lights)
 uniform vec3 uAmbientLight;
@@ -55,7 +57,11 @@ void main()
     {
         if (uFogMode == 0) // LINEAR
         {
-            vFogFactor = (uFogEnd - fogCoord) / (uFogEnd - uFogStart);
+            float fogRange = uFogEnd - uFogStart;
+            if (abs(fogRange) > 0.001)
+                vFogFactor = (uFogEnd - fogCoord) / fogRange;
+            else
+                vFogFactor = 1.0;
         }
         else if (uFogMode == 1) // EXP
         {

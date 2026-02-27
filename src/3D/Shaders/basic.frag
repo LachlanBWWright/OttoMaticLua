@@ -19,7 +19,7 @@ uniform int uMultiTextureCombine; // 0=modulate, 1=add
 
 // Sphere mapping uniforms
 uniform bool uUseSphereMap;
-uniform mat3 uNormalMatrix;
+uniform mediump mat3 uNormalMatrix;
 
 // Fog uniforms
 uniform bool uFogEnabled;

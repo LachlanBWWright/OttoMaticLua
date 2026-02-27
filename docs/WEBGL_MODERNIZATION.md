@@ -278,6 +278,27 @@ All modern browsers supporting WebGL 1.0:
 - Some advanced glTexGen modes not fully implemented
 - Performance may differ from native OpenGL
 
+### WebGL/GLSL ES Precision Requirements
+
+**IMPORTANT:** WebGL has strict precision requirements that differ from desktop OpenGL:
+
+1. **Matrix uniforms require explicit precision qualifiers**
+   - Matrix types (mat2, mat3, mat4) do NOT inherit from `precision mediump float;`
+   - Example: Use `uniform mediump mat3 uNormalMatrix;` instead of `uniform mat3 uNormalMatrix;`
+
+2. **Uniforms must have matching precision between shaders**
+   - If a uniform appears in both vertex and fragment shaders, precision must match
+   - Mismatch causes: `"Precisions of uniform differ between VERTEX and FRAGMENT shaders"`
+
+3. **Fragment shaders require explicit precision**
+   - Always add `precision mediump float;` at the top of fragment shaders
+   - Vertex shaders default to `highp` but explicit declaration is recommended
+
+4. **When modifying shaders:**
+   - Update both .vert/.frag files AND embedded C strings in modern_gl.c
+   - Test shader compilation in WebGL environment
+   - Check browser console for [ModernGL] error messages
+
 ## Maintenance
 
 ### Adding New Rendering Code
