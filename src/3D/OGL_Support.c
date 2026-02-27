@@ -856,6 +856,13 @@ static void* ConvertTextureForWebGL(const void* src, int width, int height,
     // but WebGL does not.  Force them to match.
     if (*ioDataType == GL_UNSIGNED_BYTE)
     {
+        // GL_RGB5_A1 is a desktop-only internalFormat that WebGL rejects with
+        // GL_UNSIGNED_BYTE data.  Map it to the closest WebGL-valid format.
+        if (*ioDestFormat == GL_RGB5_A1)
+        {
+            *ioDestFormat = (*ioSrcFormat == GL_RGBA) ? GL_RGBA : GL_RGB;
+        }
+
         if (*ioSrcFormat == GL_RGBA && *ioDestFormat == GL_RGB)
         {
             // Keep src RGBA as-is, but set internalFormat to RGBA so WebGL accepts it
@@ -865,6 +872,12 @@ static void* ConvertTextureForWebGL(const void* src, int width, int height,
         {
             // Src is RGB, dest wants RGBA — set both to RGB (alpha will be 1.0)
             *ioDestFormat = GL_RGB;
+        }
+
+        // Catch-all: if src and dest still don't match, force them equal
+        if (*ioSrcFormat != *ioDestFormat)
+        {
+            *ioDestFormat = *ioSrcFormat;
         }
     }
 
@@ -890,6 +903,17 @@ GLuint	textureName;
 	                                                &srcFormat, &destFormat, &dataType);
 	if (convertedPixels)
 		imageMemory = convertedPixels;
+
+	// Log texture format info for debugging
+	{
+		static int sTexLoadCount = 0;
+		sTexLoadCount++;
+		if (sTexLoadCount <= 10)
+		{
+			SDL_Log("[ModernGL] TextureLoad #%d: %dx%d src=0x%x dest=0x%x type=0x%x",
+			        sTexLoadCount, width, height, srcFormat, destFormat, dataType);
+		}
+	}
 #endif
 
 			/* GET A UNIQUE TEXTURE NAME & INITIALIZE IT */

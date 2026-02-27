@@ -20,6 +20,7 @@
 #define glColor4fv(v) ModernGL_ImmediateColor((v)[0],(v)[1],(v)[2],(v)[3])
 #define glNormal3f(x,y,z) ModernGL_ImmediateNormal(x,y,z)
 #define glTexCoord2f(u,v) ModernGL_ImmediateTexCoord(u,v)
+#define glTexCoord2fv(v) ModernGL_ImmediateTexCoord((v)[0],(v)[1])
 #define glVertex2f(x,y) ModernGL_ImmediateVertex(x,y,0.0f)
 #define glVertex3f(x,y,z) ModernGL_ImmediateVertex(x,y,z)
 #define glVertex3fv(v) ModernGL_ImmediateVertex((v)[0],(v)[1],(v)[2])
