@@ -1,0 +1,438 @@
+//
+// state_compat.c
+// OpenGL state management compatibility implementation
+//
+
+#ifdef __EMSCRIPTEN__
+
+#include "game.h"
+#include <string.h>
+#include <math.h>
+
+// Matrix stack implementation
+#define MATRIX_STACK_DEPTH 32
+
+typedef struct {
+    float matrices[MATRIX_STACK_DEPTH][16];
+    int depth;
+} MatrixStack;
+
+static MatrixStack gModelViewStack;
+static MatrixStack gProjectionStack;
+static MatrixStack gTextureStack;
+static MatrixStack* gCurrentStack = &gModelViewStack;
+
+static GLenum gCurrentMatrixMode = GL_MODELVIEW;
+static int gCurrentTextureUnit = 0;
+static Boolean gLightingEnabled = false;
+static Boolean gFogEnabled = false;
+static Boolean gAlphaTestEnabled = false;
+static int gAlphaFunc = 7; // GL_ALWAYS
+static float gAlphaRef = 0.0f;
+
+// Helper to multiply two 4x4 matrices
+static void Matrix4x4Multiply(const float* a, const float* b, float* out)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            out[i * 4 + j] = 0;
+            for (int k = 0; k < 4; k++)
+            {
+                out[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j];
+            }
+        }
+    }
+}
+
+// Helper to set identity matrix
+static void Matrix4x4Identity(float* m)
+{
+    memset(m, 0, 16 * sizeof(float));
+    m[0] = m[5] = m[10] = m[15] = 1.0f;
+}
+
+void CompatGL_Enable(GLenum cap)
+{
+    switch (cap)
+    {
+        case GL_LIGHTING:
+            gLightingEnabled = true;
+            ModernGL_SetLighting(true);
+            break;
+        case GL_FOG:
+            gFogEnabled = true;
+            break;
+        case GL_ALPHA_TEST:
+            gAlphaTestEnabled = true;
+            break;
+        // Other states (GL_BLEND, GL_DEPTH_TEST, etc.) pass through to real OpenGL
+        default:
+            glEnable(cap); // Call real OpenGL function via function pointer
+            break;
+    }
+}
+
+void CompatGL_Disable(GLenum cap)
+{
+    switch (cap)
+    {
+        case GL_LIGHTING:
+            gLightingEnabled = false;
+            ModernGL_SetLighting(false);
+            break;
+        case GL_FOG:
+            gFogEnabled = false;
+            break;
+        case GL_ALPHA_TEST:
+            gAlphaTestEnabled = false;
+            break;
+        default:
+            glDisable(cap);
+            break;
+    }
+}
+
+void CompatGL_AlphaFunc(GLenum func, GLfloat ref)
+{
+    // Convert GL alpha func to our internal format
+    switch (func)
+    {
+        case GL_NEVER: gAlphaFunc = 0; break;
+        case GL_LESS: gAlphaFunc = 1; break;
+        case GL_EQUAL: gAlphaFunc = 2; break;
+        case GL_LEQUAL: gAlphaFunc = 3; break;
+        case GL_GREATER: gAlphaFunc = 4; break;
+        case GL_NOTEQUAL: gAlphaFunc = 5; break;
+        case GL_GEQUAL: gAlphaFunc = 6; break;
+        case GL_ALWAYS: gAlphaFunc = 7; break;
+    }
+    gAlphaRef = ref;
+}
+
+void CompatGL_Fog(GLenum pname, GLfloat param)
+{
+    extern ModernGLState gModernGLState;
+
+    switch (pname)
+    {
+        case GL_FOG_START:
+            gModernGLState.fogStart = param;
+            break;
+        case GL_FOG_END:
+            gModernGLState.fogEnd = param;
+            break;
+        case GL_FOG_DENSITY:
+            gModernGLState.fogDensity = param;
+            break;
+    }
+}
+
+void CompatGL_Fogfv(GLenum pname, const GLfloat* params)
+{
+    extern ModernGLState gModernGLState;
+
+    if (pname == GL_FOG_COLOR)
+    {
+        gModernGLState.fogColor[0] = params[0];
+        gModernGLState.fogColor[1] = params[1];
+        gModernGLState.fogColor[2] = params[2];
+    }
+}
+
+void CompatGL_Fogi(GLenum pname, GLint param)
+{
+    extern ModernGLState gModernGLState;
+
+    if (pname == GL_FOG_MODE)
+    {
+        switch (param)
+        {
+            case GL_LINEAR: gModernGLState.fogMode = 0; break;
+            case GL_EXP: gModernGLState.fogMode = 1; break;
+            case GL_EXP2: gModernGLState.fogMode = 2; break;
+        }
+    }
+}
+
+void CompatGL_Light(GLenum light, GLenum pname, const GLfloat* params)
+{
+    extern ModernGLState gModernGLState;
+
+    int lightIndex = light - GL_LIGHT0;
+    if (lightIndex < 0 || lightIndex >= 4) return;
+
+    if (pname == GL_POSITION)
+    {
+        // Position is a direction for directional lights
+        gModernGLState.lightDirection[lightIndex][0] = params[0];
+        gModernGLState.lightDirection[lightIndex][1] = params[1];
+        gModernGLState.lightDirection[lightIndex][2] = params[2];
+        // Normalize
+        float len = sqrtf(params[0]*params[0] + params[1]*params[1] + params[2]*params[2]);
+        if (len > 0.0001f)
+        {
+            gModernGLState.lightDirection[lightIndex][0] /= len;
+            gModernGLState.lightDirection[lightIndex][1] /= len;
+            gModernGLState.lightDirection[lightIndex][2] /= len;
+        }
+    }
+    else if (pname == GL_DIFFUSE)
+    {
+        gModernGLState.lightColor[lightIndex][0] = params[0];
+        gModernGLState.lightColor[lightIndex][1] = params[1];
+        gModernGLState.lightColor[lightIndex][2] = params[2];
+    }
+}
+
+void CompatGL_LightModelfv(GLenum pname, const GLfloat* params)
+{
+    extern ModernGLState gModernGLState;
+
+    if (pname == GL_LIGHT_MODEL_AMBIENT)
+    {
+        gModernGLState.ambientLight[0] = params[0];
+        gModernGLState.ambientLight[1] = params[1];
+        gModernGLState.ambientLight[2] = params[2];
+    }
+}
+
+void CompatGL_Material(GLenum face, GLenum pname, const GLfloat* params)
+{
+    extern ModernGLState gModernGLState;
+
+    if (pname == GL_AMBIENT_AND_DIFFUSE || pname == GL_DIFFUSE)
+    {
+        gModernGLState.materialColor[0] = params[0];
+        gModernGLState.materialColor[1] = params[1];
+        gModernGLState.materialColor[2] = params[2];
+        gModernGLState.materialColor[3] = params[3];
+    }
+}
+
+void CompatGL_TexEnvi(GLenum target, GLenum pname, GLint param)
+{
+    extern ModernGLState gModernGLState;
+
+    if (target == GL_TEXTURE_ENV && pname == GL_TEXTURE_ENV_MODE)
+    {
+        // Map texture environment modes to our multi-texture combine mode
+        switch (param)
+        {
+            case GL_MODULATE:
+                gModernGLState.multiTextureCombine = 0;
+                break;
+            case GL_ADD:
+            case GL_COMBINE:
+                gModernGLState.multiTextureCombine = 1;
+                break;
+        }
+    }
+    else if (pname == GL_COMBINE_RGB)
+    {
+        if (param == GL_ADD)
+            gModernGLState.multiTextureCombine = 1;
+    }
+}
+
+void CompatGL_TexGeni(GLenum coord, GLenum pname, GLint param)
+{
+    extern ModernGLState gModernGLState;
+
+    if (pname == GL_TEXTURE_GEN_MODE && param == GL_SPHERE_MAP)
+    {
+        gModernGLState.useSphereMap = true;
+    }
+}
+
+void CompatGL_ActiveTexture(GLenum texture)
+{
+    gCurrentTextureUnit = (texture == GL_TEXTURE1 || texture == GL_TEXTURE1_ARB) ? 1 : 0;
+
+    // Also call the real function for texture binding
+    extern PFNGLACTIVETEXTUREARBPROC procptr_glActiveTextureARB;
+    if (procptr_glActiveTextureARB)
+        procptr_glActiveTextureARB(texture);
+}
+
+void CompatGL_MatrixMode(GLenum mode)
+{
+    gCurrentMatrixMode = mode;
+
+    switch (mode)
+    {
+        case GL_MODELVIEW:
+            gCurrentStack = &gModelViewStack;
+            break;
+        case GL_PROJECTION:
+            gCurrentStack = &gProjectionStack;
+            break;
+        case GL_TEXTURE:
+            gCurrentStack = &gTextureStack;
+            break;
+    }
+}
+
+void CompatGL_LoadMatrix(const GLfloat* m)
+{
+    if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
+    {
+        memcpy(gCurrentStack->matrices[gCurrentStack->depth], m, 16 * sizeof(float));
+    }
+}
+
+void CompatGL_LoadIdentity(void)
+{
+    if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
+    {
+        Matrix4x4Identity(gCurrentStack->matrices[gCurrentStack->depth]);
+    }
+}
+
+void CompatGL_MultMatrix(const GLfloat* m)
+{
+    if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
+    {
+        float result[16];
+        Matrix4x4Multiply(gCurrentStack->matrices[gCurrentStack->depth], m, result);
+        memcpy(gCurrentStack->matrices[gCurrentStack->depth], result, 16 * sizeof(float));
+    }
+}
+
+void CompatGL_PushMatrix(void)
+{
+    if (gCurrentStack->depth + 1 < MATRIX_STACK_DEPTH)
+    {
+        memcpy(gCurrentStack->matrices[gCurrentStack->depth + 1],
+               gCurrentStack->matrices[gCurrentStack->depth],
+               16 * sizeof(float));
+        gCurrentStack->depth++;
+    }
+}
+
+void CompatGL_PopMatrix(void)
+{
+    if (gCurrentStack->depth > 0)
+    {
+        gCurrentStack->depth--;
+    }
+}
+
+void CompatGL_Translate(GLfloat x, GLfloat y, GLfloat z)
+{
+    float translation[16];
+    Matrix4x4Identity(translation);
+    translation[12] = x;
+    translation[13] = y;
+    translation[14] = z;
+    CompatGL_MultMatrix(translation);
+}
+
+void CompatGL_Rotate(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
+{
+    float rad = angle * 3.14159265f / 180.0f;
+    float c = cosf(rad);
+    float s = sinf(rad);
+    float len = sqrtf(x*x + y*y + z*z);
+    if (len > 0.0001f)
+    {
+        x /= len;
+        y /= len;
+        z /= len;
+    }
+
+    float rotation[16];
+    rotation[0] = x*x*(1-c) + c;
+    rotation[1] = y*x*(1-c) + z*s;
+    rotation[2] = x*z*(1-c) - y*s;
+    rotation[3] = 0;
+    rotation[4] = x*y*(1-c) - z*s;
+    rotation[5] = y*y*(1-c) + c;
+    rotation[6] = y*z*(1-c) + x*s;
+    rotation[7] = 0;
+    rotation[8] = x*z*(1-c) + y*s;
+    rotation[9] = y*z*(1-c) - x*s;
+    rotation[10] = z*z*(1-c) + c;
+    rotation[11] = 0;
+    rotation[12] = 0;
+    rotation[13] = 0;
+    rotation[14] = 0;
+    rotation[15] = 1;
+
+    CompatGL_MultMatrix(rotation);
+}
+
+void CompatGL_Scale(GLfloat x, GLfloat y, GLfloat z)
+{
+    float scale[16];
+    Matrix4x4Identity(scale);
+    scale[0] = x;
+    scale[5] = y;
+    scale[10] = z;
+    CompatGL_MultMatrix(scale);
+}
+
+void CompatGL_Frustum(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near, GLdouble far)
+{
+    float frustum[16] = {0};
+    frustum[0] = (2.0f * near) / (right - left);
+    frustum[5] = (2.0f * near) / (top - bottom);
+    frustum[8] = (right + left) / (right - left);
+    frustum[9] = (top + bottom) / (top - bottom);
+    frustum[10] = -(far + near) / (far - near);
+    frustum[11] = -1.0f;
+    frustum[14] = -(2.0f * far * near) / (far - near);
+    CompatGL_MultMatrix(frustum);
+}
+
+void CompatGL_Ortho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near, GLdouble far)
+{
+    float ortho[16] = {0};
+    ortho[0] = 2.0f / (right - left);
+    ortho[5] = 2.0f / (top - bottom);
+    ortho[10] = -2.0f / (far - near);
+    ortho[12] = -(right + left) / (right - left);
+    ortho[13] = -(top + bottom) / (top - bottom);
+    ortho[14] = -(far + near) / (far - near);
+    ortho[15] = 1.0f;
+    CompatGL_MultMatrix(ortho);
+}
+
+void CompatGL_UpdateShaderState(void)
+{
+    extern ModernGLState gModernGLState;
+
+    // Compute MVP matrix
+    float mvp[16];
+    Matrix4x4Multiply(gProjectionStack.matrices[gProjectionStack.depth],
+                      gModelViewStack.matrices[gModelViewStack.depth],
+                      mvp);
+
+    // Extract 3x3 normal matrix from model-view
+    float normalMatrix[9];
+    const float* mv = gModelViewStack.matrices[gModelViewStack.depth];
+    normalMatrix[0] = mv[0]; normalMatrix[1] = mv[1]; normalMatrix[2] = mv[2];
+    normalMatrix[3] = mv[4]; normalMatrix[4] = mv[5]; normalMatrix[5] = mv[6];
+    normalMatrix[6] = mv[8]; normalMatrix[7] = mv[9]; normalMatrix[8] = mv[10];
+
+    // Update matrices in shader state
+    ModernGL_SetMatrices(mvp, gModelViewStack.matrices[gModelViewStack.depth], normalMatrix);
+
+    // Update texture matrix
+    ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
+
+    // Update fog state
+    ModernGL_SetFog(gFogEnabled, gModernGLState.fogMode, gModernGLState.fogStart,
+                    gModernGLState.fogEnd, gModernGLState.fogDensity,
+                    gModernGLState.fogColor[0], gModernGLState.fogColor[1], gModernGLState.fogColor[2]);
+
+    // Update alpha test
+    ModernGL_SetAlphaTest(gAlphaTestEnabled, gAlphaFunc, gAlphaRef);
+
+    // Use shader and update all uniforms
+    ModernGL_UseShader();
+    ModernGL_UpdateUniforms();
+}
+
+#endif // __EMSCRIPTEN__
