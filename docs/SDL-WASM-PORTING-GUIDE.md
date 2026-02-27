@@ -64,8 +64,9 @@ if(EMSCRIPTEN)
         "SHELL:-sASYNCIFY_STACK_SIZE=65536"
         # Enable C++ exception catching (JS-based, compatible with ASYNCIFY).
         "SHELL:-sDISABLE_EXCEPTION_CATCHING=0"
-        # Emulate legacy OpenGL fixed-function pipeline via WebGL shaders.
-        "SHELL:-sLEGACY_GL_EMULATION=1"
+        # Provide GLES2 functions for WebGL. Use FULL_ES2 (not LEGACY_GL_EMULATION)
+        # when using a custom GL compat layer, to avoid conflicting emulation hooks.
+        "SHELL:-sFULL_ES2=1"
         # Allow heap to grow dynamically.
         "SHELL:-sALLOW_MEMORY_GROWTH=1"
         # Initial heap size (256 MB example for a large game).
@@ -183,9 +184,11 @@ WebGL is based on OpenGL ES 2.0, which lacks:
 
 Add `-sLEGACY_GL_EMULATION=1` to link flags. Emscripten provides limited emulation of legacy GL calls. This is the quickest path but has limitations and performance overhead.
 
-### Approach 2: Custom Compatibility Layer (More Robust)
+**Warning**: `LEGACY_GL_EMULATION` should **not** be combined with a custom GL compatibility layer. The two will conflict: Emscripten's hooks intercept the same GL calls your macros redirect, leading to double-handling, null pointer crashes in `getCurTexUnit`, and rendering that silently produces no output (black screen). If you implement a custom compat layer (Approach 2), use `-sFULL_ES2=1` instead.
 
-Create a shader-based compatibility layer that intercepts legacy GL calls:
+### Approach 2: Custom Compatibility Layer (Recommended for Complex Games)
+
+Use `-sFULL_ES2=1` (provides standard GLES2 functions without legacy emulation hooks) and create a shader-based compatibility layer that intercepts legacy GL calls via macros:
 
 ```c
 // gl_compat.h - Redirect legacy calls to modern implementations
@@ -199,6 +202,22 @@ Create a shader-based compatibility layer that intercepts legacy GL calls:
 ```
 
 Implement these with a vertex buffer + shader program.
+
+### Custom Compat Layer: Key State Tracking Requirements
+
+When implementing a custom GL compat layer with `-sFULL_ES2=1`, you must manually track and sync all emulated state to shader uniforms. Critical areas:
+
+1. **Per-texture-unit `GL_TEXTURE_2D` state**: Track `glEnable(GL_TEXTURE_2D)` / `glDisable(GL_TEXTURE_2D)` separately for each texture unit. Sync to shader uniforms (`useTexture0`, `useTexture1`) before every draw call.
+
+2. **Vertex color state**: Set a `useVertexColor` uniform when the game enables `GL_COLOR_ARRAY` via `glEnableClientState`. Both immediate mode (`glBegin/glEnd`) and vertex array draws need this.
+
+3. **`glBlendFunc` / `glDepthMask` tracking**: WebGL's `glGetIntegerv(GL_BLEND_SRC)` and `glGetBooleanv(GL_DEPTH_WRITEMASK)` may not return correct values for state set through your compat layer. Track these in C variables and intercept the query functions.
+
+4. **`glClientActiveTextureARB`**: This legacy function selects which texture unit receives subsequent `glTexCoordPointer` calls. Route it through your vertex array compat layer instead of making it a no-op.
+
+5. **Sphere map reset**: When `glDisable(GL_TEXTURE_GEN_S)` or `glDisable(GL_TEXTURE_GEN_T)` is called, reset any `useSphereMap` shader uniform.
+
+6. **Indexed draw safety**: When converting `glDrawElements` to non-indexed draws, compute `maxIndex` from the index array and use that (not `count`) to convert the source vertex arrays. Using `count` directly causes out-of-bounds reads when `count` (number of indices) exceeds the number of source vertices.
 
 ### WebGL Texture Format Restrictions
 
@@ -218,6 +237,7 @@ WebGL only supports a small set of `format`/`type` combinations for `glTexImage2
 Desktop OpenGL combos that are **NOT supported** in WebGL:
 - `GL_BGRA_EXT` + `GL_UNSIGNED_SHORT_1_5_5_5_REV` (common in Mac-era games)
 - `GL_BGRA` + `GL_UNSIGNED_BYTE`
+- `GL_RGB5_A1` as `internalFormat` with `GL_UNSIGNED_BYTE` data (desktop GL auto-converts; WebGL rejects)
 - Mismatched `internalFormat` / `format` (e.g. `src=GL_RGBA, dest=GL_RGB` — desktop GL drops alpha silently, WebGL errors)
 
 **Fix**: Add a texture conversion function that runs before `glTexImage2D` on Emscripten:
@@ -243,8 +263,13 @@ static void* ConvertTextureForWebGL(const void* src, int w, int h,
     }
     // Force internalFormat == format (WebGL requirement)
     if (*ioType == GL_UNSIGNED_BYTE) {
+        // GL_RGB5_A1 is desktop-only with UNSIGNED_BYTE data
+        if (*ioDest == GL_RGB5_A1)
+            *ioDest = (*ioSrc == GL_RGBA) ? GL_RGBA : GL_RGB;
         if (*ioSrc == GL_RGBA && *ioDest == GL_RGB)  *ioDest = GL_RGBA;
         if (*ioSrc == GL_RGB  && *ioDest == GL_RGBA) *ioDest = GL_RGB;
+        // Catch-all: force src == dest
+        if (*ioSrc != *ioDest) *ioDest = *ioSrc;
     }
     return NULL;
 }
@@ -452,7 +477,9 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 | `function signature mismatch` | ABI mismatch in exception handling | Ensure all TUs use same exception flags |
 | `Cannot enlarge memory arrays` | Heap too small | Set `ALLOW_MEMORY_GROWTH=1` and increase `INITIAL_MEMORY` |
 | Black screen, no GL errors | GL context not created | Check `SDL_GL_CONTEXT_PROFILE_ES` is set |
-| `WARNING: using emscripten GL emulation` | `LEGACY_GL_EMULATION=1` active | Expected warning; safe to ignore if game renders correctly |
+| `WARNING: using emscripten GL emulation` | `LEGACY_GL_EMULATION=1` active | Switch to `FULL_ES2=1` if using a custom GL compat layer. Only use `LEGACY_GL_EMULATION` if you have no custom layer. |
+| Black screen with custom compat layer | `LEGACY_GL_EMULATION` conflicts with custom layer | Remove `LEGACY_GL_EMULATION`, use `FULL_ES2=1` instead |
+| `texImage2D: invalid internalformat` | Desktop-only internalFormat (e.g. `GL_RGB5_A1` with `GL_UNSIGNED_BYTE`) | Add format conversion; force `internalFormat == format` for `GL_UNSIGNED_BYTE` data |
 | Infinite hang at GL initialization | `glEnable`/`glDisable` macro recursion | `#undef` the macros in the compat `.c` file before the function implementations |
 | `InternalError: too much recursion` | Compat layer calls itself via macro | Same as above—ensure default/passthrough cases call the real GL function |
 
@@ -511,6 +538,10 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 14. **Canvas hidden during SDL window creation**: SDL3 on Emscripten queries the canvas's CSS dimensions when creating a window. If the canvas is hidden (`display: none`, `height: 0`), the window will be 0×0 pixels. Use an overlay pattern instead. See [Canvas Sizing for SDL3 on Emscripten](#canvas-sizing-for-sdl3-on-emscripten).
 15. **GL error queue pollution**: `LEGACY_GL_EMULATION` generates spurious `GL_INVALID_ENUM` errors that accumulate in the error queue. Any `glGetError()`-based assertion will pick these up and falsely report errors from unrelated GL calls. Drain the queue on Emscripten builds. See [GL Error Queue Pollution from LEGACY_GL_EMULATION](#gl-error-queue-pollution-from-legacy_gl_emulation).
 16. **`getCurTexUnit` crash from LEGACY_GL_EMULATION hooks**: When both a custom GL compat layer AND `LEGACY_GL_EMULATION` are active, the compat layer's default/passthrough case for `glEnable`/`glDisable` calls Emscripten's hooked version. Before the first draw call, the emulation's `GLImmediate.currentRenderer` is null, causing a crash in `getCurTexUnit`. Fix: bypass the hooks by calling WebGL directly via `EM_ASM({ GLctx.enable($0); }, cap)`.
+17. **FULL_ES2 vs LEGACY_GL_EMULATION**: When using a custom GL compat layer with `#define glBegin`, `#define glEnable`, etc., **always** use `-sFULL_ES2=1` instead of `-sLEGACY_GL_EMULATION=1`. `LEGACY_GL_EMULATION` installs JS-side hooks on the same GL functions your macros intercept, causing double-handling and rendering to silently produce black output. `FULL_ES2` provides clean GLES2 functions without hooks.
+18. **Missing `glTexCoord2fv` and similar variants**: `FULL_ES2` does not provide any legacy GL functions. Every variant (`glTexCoord2fv`, `glVertex3fv`, `glColor4fv`, `glNormal3fv`, etc.) must be macro-redirected in your compat layer. Missing even one will cause linker errors like `undefined symbol: glTexCoord2fv`.
+19. **Per-texture-unit state tracking**: Desktop OpenGL tracks `GL_TEXTURE_2D` enable/disable per texture unit. A compat layer must do the same — use an array indexed by the active texture unit (set via `glActiveTexture`). Failing to do this causes textures to not appear (useTexture0/useTexture1 shader uniforms stuck at false).
+20. **`GL_RGB5_A1` as internalFormat with `GL_UNSIGNED_BYTE`**: Desktop OpenGL silently accepts `glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB5_A1, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, data)` and converts on the fly. WebGL rejects this with `INVALID_VALUE`. Always add a catch-all in your texture conversion function to force `internalFormat == format` when `type` is `GL_UNSIGNED_BYTE`.
 
 ---
 
