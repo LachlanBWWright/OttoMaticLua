@@ -107,7 +107,10 @@ uint32_t			gLoadedScore;
 
 void ToolBoxInit(void)
 {
+#ifndef __EMSCRIPTEN__
+	// On web, let the user choose fullscreen via the UI button
 	SetFullscreenMode(true);
+#endif
 
 	OGL_Boot();
 

@@ -168,3 +168,21 @@ FS.writeFile('/Data/Terrain/custom.ter', yourTerrainData);
 Module.ccall('OttoMatic_SetTerrainPath', null, ['string'], ['/Data/Terrain/custom.ter']);
 ```
 
+## Known Issues (WebAssembly)
+
+### ScriptProcessorNode Deprecation Warning
+
+When running the WebAssembly build in modern browsers, you may see this console warning:
+
+```
+[Deprecation] The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead.
+```
+
+**Cause:** This warning originates from SDL3's Emscripten audio backend, which currently uses the deprecated `ScriptProcessorNode` Web Audio API for audio playback.
+
+**Impact:** The warning is cosmetic and does not affect gameplay. Audio continues to function normally. However, browsers may eventually remove `ScriptProcessorNode` support entirely in future versions.
+
+**Resolution:** This requires an update to SDL3's Emscripten audio backend to use the modern `AudioWorklet` API instead. This is being addressed in the SDL3 project (see [SDL Issue #11258](https://github.com/libsdl-org/SDL/issues/11258)). Once SDL3 updates their audio backend, rebuilding with the newer SDL3 version will resolve this warning.
+
+**Workaround:** The warning can be safely ignored for now, as audio functionality remains fully operational.
+
