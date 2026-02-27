@@ -50,14 +50,21 @@ void InitWindowStuff(void)
 
 	OGLSetupInputType viewDef;
 	OGL_NewViewDef(&viewDef);
+
+	SDL_Log("InitWindowStuff: setting up OGL window...");
 	OGL_SetupWindow(&viewDef);
+
+	SDL_Log("InitWindowStuff: rendering %d black frames...", 45);
 	for (int i = 0; i < 45; i++)
 	{
 		GAME_YIELD_BROWSER();	// yield to browser event loop (required for Emscripten)
 		OGL_DrawScene(nil);
 		UpdateInput();  // will flush SDL events
 	}
+
+	SDL_Log("InitWindowStuff: disposing temporary OGL setup...");
 	OGL_DisposeWindowSetup();
+	SDL_Log("InitWindowStuff: done");
 }
 
 

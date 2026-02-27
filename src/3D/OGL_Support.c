@@ -193,12 +193,15 @@ void OGL_SetupWindow(OGLSetupInputType *setupDefPtr)
 
 				/* SETUP */
 
+	SDL_Log("OGL_SetupWindow: InitDrawContext...");
 	OGL_InitDrawContext(&setupDefPtr->view);
 	OGL_CheckError();
 
+	SDL_Log("OGL_SetupWindow: SetStyles...");
 	OGL_SetStyles(setupDefPtr);
 	OGL_CheckError();
 
+	SDL_Log("OGL_SetupWindow: CreateLights...");
 	OGL_CreateLights(&setupDefPtr->lights);
 	OGL_CheckError();
 

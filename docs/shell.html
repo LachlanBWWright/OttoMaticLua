@@ -306,6 +306,14 @@
     var _fenceEnabled = true;
     var _muted        = false;
 
+    // ── Global error handler for WASM exceptions ────────────
+    window.addEventListener('error', function(e) {
+      console.error('[OttoMatic] Unhandled error:', e.message, e.filename, e.lineno);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('[OttoMatic] Unhandled promise rejection:', e.reason);
+    });
+
     // ── Emscripten Module ─────────────────────────────────
     var Module = {
       canvas: document.getElementById('canvas'),
@@ -331,6 +339,19 @@
         console.error('[OttoMatic] ABORT: ' + what);
         var el = document.getElementById('status-text');
         if (el) el.textContent = 'Error: ' + what;
+        var card = document.getElementById('loading-card');
+        if (card) card.style.display = '';
+      },
+
+      // Catch unhandled exceptions from the WASM module
+      onExit: function (code) {
+        if (code !== 0) {
+          console.error('[OttoMatic] Exited with code: ' + code);
+          var el = document.getElementById('status-text');
+          if (el) el.textContent = 'Game exited with error (code ' + code + ')';
+          var card = document.getElementById('loading-card');
+          if (card) card.style.display = '';
+        }
       },
 
       onRuntimeInitialized: function () {
