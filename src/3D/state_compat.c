@@ -21,7 +21,6 @@
 #undef glGetBooleanv
 #undef glBlendFunc
 #undef glDepthMask
-#undef glDepthMask
 
 // ── Direct WebGL calls ────────────────────────────────────────────────────────
 // When LEGACY_GL_EMULATION is active, Emscripten hooks glEnable/glDisable with
