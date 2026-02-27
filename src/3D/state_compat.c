@@ -8,6 +8,7 @@
 #include "game.h"
 #include <string.h>
 #include <math.h>
+#include <emscripten/emscripten.h>
 
 // IMPORTANT: #undef macros that this file implements, so the default/passthrough
 // cases can call the REAL OpenGL functions provided by Emscripten's GL emulation
@@ -16,6 +17,43 @@
 #undef glDisable
 #undef glIsEnabled
 #undef glGetFloatv
+
+// ── Direct WebGL calls ────────────────────────────────────────────────────────
+// When LEGACY_GL_EMULATION is active, Emscripten hooks glEnable/glDisable with
+// wrappers that inspect texture-unit state via getCurTexUnit().  That state is
+// only initialised after the first draw call, so any glEnable/glDisable that
+// happens during OpenGL *initialisation* (before any geometry has been drawn)
+// will crash with "Cannot read properties of null".
+//
+// To avoid this, the default/passthrough cases below call the WebGL context
+// directly (GLctx.enable / GLctx.disable / GLctx.isEnabled / GLctx.getParameter),
+// bypassing Emscripten's hooks entirely.  This is safe because the caps that
+// reach the default case (GL_BLEND, GL_DEPTH_TEST, GL_CULL_FACE, …) are plain
+// WebGL caps with no legacy-emulation semantics.
+// ──────────────────────────────────────────────────────────────────────────────
+
+static void WebGL_Enable(GLenum cap)
+{
+    EM_ASM({ GLctx.enable($0); }, cap);
+}
+
+static void WebGL_Disable(GLenum cap)
+{
+    EM_ASM({ GLctx.disable($0); }, cap);
+}
+
+static GLboolean WebGL_IsEnabled(GLenum cap)
+{
+    return (GLboolean)EM_ASM_INT({ return GLctx.isEnabled($0) ? 1 : 0; }, cap);
+}
+
+static void WebGL_GetFloatv(GLenum pname, GLfloat* params)
+{
+    // For unsupported pnames fall back to the real glGetFloatv (which is the
+    // Emscripten wrapper).  The one pname we intercept (GL_CURRENT_COLOR)
+    // never reaches here — it's handled in CompatGL_GetFloatv above.
+    glGetFloatv(pname, params);
+}
 
 // Matrix stack implementation
 #define MATRIX_STACK_DEPTH 32
@@ -105,9 +143,10 @@ void CompatGL_Enable(GLenum cap)
         }
 
         // Other states (GL_BLEND, GL_DEPTH_TEST, GL_CULL_FACE, etc.)
-        // pass through to real WebGL glEnable (safe because we #undef'd the macro above)
+        // Call WebGL context directly to bypass LEGACY_GL_EMULATION hooks
+        // that would crash before the first draw call (getCurTexUnit is null).
         default:
-            glEnable(cap);
+            WebGL_Enable(cap);
             break;
     }
 }
@@ -148,7 +187,7 @@ void CompatGL_Disable(GLenum cap)
             break;
 
         default:
-            glDisable(cap);
+            WebGL_Disable(cap);
             break;
     }
 }
@@ -506,7 +545,7 @@ GLboolean CompatGL_IsEnabled(GLenum cap)
         case GL_RESCALE_NORMAL: return false;
         case GL_COLOR_MATERIAL: return false;
         default:
-            return glIsEnabled(cap);
+            return WebGL_IsEnabled(cap);
     }
 }
 
@@ -525,7 +564,7 @@ void CompatGL_GetFloatv(GLenum pname, GLfloat* params)
             params[3] = gImmediateModeBuffer.currentColor[3];
             break;
         default:
-            glGetFloatv(pname, params);
+            WebGL_GetFloatv(pname, params);
             break;
     }
 }

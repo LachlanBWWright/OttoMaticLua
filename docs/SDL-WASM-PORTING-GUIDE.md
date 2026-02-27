@@ -200,6 +200,97 @@ Create a shader-based compatibility layer that intercepts legacy GL calls:
 
 Implement these with a vertex buffer + shader program.
 
+### WebGL Texture Format Restrictions
+
+WebGL only supports a small set of `format`/`type` combinations for `glTexImage2D`:
+
+| format | type | Notes |
+|--------|------|-------|
+| `GL_RGBA` | `GL_UNSIGNED_BYTE` | Most common |
+| `GL_RGB` | `GL_UNSIGNED_BYTE` | No alpha |
+| `GL_RGBA` | `GL_UNSIGNED_SHORT_4_4_4_4` | |
+| `GL_RGBA` | `GL_UNSIGNED_SHORT_5_5_5_1` | |
+| `GL_RGB` | `GL_UNSIGNED_SHORT_5_6_5` | |
+| `GL_LUMINANCE` | `GL_UNSIGNED_BYTE` | Grayscale |
+| `GL_LUMINANCE_ALPHA` | `GL_UNSIGNED_BYTE` | Grayscale+alpha |
+| `GL_ALPHA` | `GL_UNSIGNED_BYTE` | Alpha only |
+
+Desktop OpenGL combos that are **NOT supported** in WebGL:
+- `GL_BGRA_EXT` + `GL_UNSIGNED_SHORT_1_5_5_5_REV` (common in Mac-era games)
+- `GL_BGRA` + `GL_UNSIGNED_BYTE`
+- Mismatched `internalFormat` / `format` (e.g. `src=GL_RGBA, dest=GL_RGB` — desktop GL drops alpha silently, WebGL errors)
+
+**Fix**: Add a texture conversion function that runs before `glTexImage2D` on Emscripten:
+
+```c
+#ifdef __EMSCRIPTEN__
+static void* ConvertTextureForWebGL(const void* src, int w, int h,
+                                     GLint* ioSrc, GLint* ioDest, GLint* ioType)
+{
+    // Convert 16-bit BGRA-1555-REV → 32-bit RGBA-8888
+    if (*ioType == GL_UNSIGNED_SHORT_1_5_5_5_REV && *ioSrc == GL_BGRA_EXT) {
+        uint8_t* rgba = malloc(w * h * 4);
+        const uint16_t* s = src;
+        for (int i = 0; i < w * h; i++) {
+            uint16_t p = s[i];
+            rgba[i*4+0] = ((p>>10)&0x1F) * 255 / 31;
+            rgba[i*4+1] = ((p>> 5)&0x1F) * 255 / 31;
+            rgba[i*4+2] = ((p>> 0)&0x1F) * 255 / 31;
+            rgba[i*4+3] = (p >> 15) ? 255 : 0;
+        }
+        *ioSrc = *ioDest = GL_RGBA; *ioType = GL_UNSIGNED_BYTE;
+        return rgba;  // caller must free()
+    }
+    // Force internalFormat == format (WebGL requirement)
+    if (*ioType == GL_UNSIGNED_BYTE) {
+        if (*ioSrc == GL_RGBA && *ioDest == GL_RGB)  *ioDest = GL_RGBA;
+        if (*ioSrc == GL_RGB  && *ioDest == GL_RGBA) *ioDest = GL_RGB;
+    }
+    return NULL;
+}
+#endif
+```
+
+### Canvas Sizing for SDL3 on Emscripten
+
+SDL3 reads the canvas element's CSS-computed dimensions when creating a window. If the canvas is hidden with `display: none` or `height: 0`, SDL will create a 0×0 drawing surface.
+
+**Do**: Use an overlay pattern — keep the canvas visible with real dimensions, and overlay a loading card on top:
+
+```html
+<div id="game-wrap" style="position: relative;">
+  <div id="loading-card" style="position: absolute; z-index: 10;">Loading…</div>
+  <canvas id="canvas" width="640" height="480"></canvas>
+</div>
+```
+
+When loading completes, hide the overlay:
+```javascript
+document.getElementById('loading-card').style.display = 'none';
+```
+
+**Don't**: Hide the canvas with `display: none`, `visibility: hidden`, `height: 0`, or any CSS that collapses its layout box before SDL creates the window.
+
+### GL Error Queue Pollution from LEGACY_GL_EMULATION
+
+Emscripten's `LEGACY_GL_EMULATION` internally calls `getParameter()` with enum values that WebGL doesn't support, generating `GL_INVALID_ENUM` (0x500) errors that accumulate in the GL error queue. These are harmless but will be picked up by any subsequent `glGetError()` call.
+
+**Fix**: On Emscripten, drain the error queue in your error-checking function and return `GL_NO_ERROR`:
+
+```c
+GLenum CheckGLError(void) {
+#ifdef __EMSCRIPTEN__
+    GLenum err;
+    while ((err = glGetError()) != GL_NO_ERROR) { /* drain */ }
+    return GL_NO_ERROR;  // prevent callers from crashing
+#else
+    return glGetError();
+#endif
+}
+```
+
+Rate-limit any error logging to avoid flooding the console (thousands of errors per second during the game loop).
+
 ### OpenGL ES Context Setup
 
 ```c
@@ -416,6 +507,10 @@ SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 10. **Unsupported GL state enums**: WebGL does not support `glEnable/glDisable` with `GL_NORMALIZE`, `GL_RESCALE_NORMAL`, `GL_COLOR_MATERIAL`, `GL_TEXTURE_GEN_S/T`, or `GL_ALPHA_TEST`. A compat layer must catch these and handle them (e.g., track state internally for shader use, or silently ignore).
 11. **`glIsEnabled` and `glGetFloatv` for emulated states**: When emulating `glEnable/glDisable` for unsupported states, also wrap `glIsEnabled` and `glGetFloatv(GL_CURRENT_COLOR, ...)` so push/pop state functions can query the emulated state correctly.
 12. **`glPolygonMode` and `glHint(GL_FOG_HINT)`**: These don't exist in WebGL/GLES2. Redirect to no-ops.
+13. **Unsupported texture formats in WebGL**: Desktop OpenGL supports `GL_BGRA_EXT` + `GL_UNSIGNED_SHORT_1_5_5_5_REV` and format mismatches (e.g. uploading RGBA pixels as RGB internal format). WebGL rejects these with `GL_INVALID_OPERATION`. Add a conversion layer that runs before `glTexImage2D` to convert to WebGL-compatible format/type combos. See [WebGL Texture Format Restrictions](#webgl-texture-format-restrictions).
+14. **Canvas hidden during SDL window creation**: SDL3 on Emscripten queries the canvas's CSS dimensions when creating a window. If the canvas is hidden (`display: none`, `height: 0`), the window will be 0×0 pixels. Use an overlay pattern instead. See [Canvas Sizing for SDL3 on Emscripten](#canvas-sizing-for-sdl3-on-emscripten).
+15. **GL error queue pollution**: `LEGACY_GL_EMULATION` generates spurious `GL_INVALID_ENUM` errors that accumulate in the error queue. Any `glGetError()`-based assertion will pick these up and falsely report errors from unrelated GL calls. Drain the queue on Emscripten builds. See [GL Error Queue Pollution from LEGACY_GL_EMULATION](#gl-error-queue-pollution-from-legacy_gl_emulation).
+16. **`getCurTexUnit` crash from LEGACY_GL_EMULATION hooks**: When both a custom GL compat layer AND `LEGACY_GL_EMULATION` are active, the compat layer's default/passthrough case for `glEnable`/`glDisable` calls Emscripten's hooked version. Before the first draw call, the emulation's `GLImmediate.currentRenderer` is null, causing a crash in `getCurTexUnit`. Fix: bypass the hooks by calling WebGL directly via `EM_ASM({ GLctx.enable($0); }, cap)`.
 
 ---
 

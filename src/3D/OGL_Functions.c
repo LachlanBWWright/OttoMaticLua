@@ -21,8 +21,10 @@ void OGL_InitFunctions(void)
 {
 #ifdef __EMSCRIPTEN__
 	// Initialize modern GL subsystem for WebAssembly
+	SDL_Log("OGL_InitFunctions: Initializing ModernGL subsystem for WebAssembly...");
 	extern void ModernGL_Init(void);
 	ModernGL_Init();
+	SDL_Log("OGL_InitFunctions: ModernGL subsystem initialized");
 #endif
 
 	procptr_glActiveTextureARB = (PFNGLACTIVETEXTUREARBPROC) SDL_GL_GetProcAddress("glActiveTextureARB");
@@ -30,11 +32,15 @@ void OGL_InitFunctions(void)
 		procptr_glActiveTextureARB = (PFNGLACTIVETEXTUREARBPROC) SDL_GL_GetProcAddress("glActiveTexture");
 
 	GAME_ASSERT(procptr_glActiveTextureARB);
+#ifdef __EMSCRIPTEN__
+	SDL_Log("OGL_InitFunctions: glActiveTexture resolved successfully");
+#endif
 
 #ifdef __EMSCRIPTEN__
 	// WebGL/Emscripten doesn't provide glClientActiveTexture
 	// Modern GL rendering path doesn't need this function
 	procptr_glClientActiveTextureARB = (PFNGLCLIENTACTIVETEXTUREARBPROC) glClientActiveTexture_noop;
+	SDL_Log("OGL_InitFunctions: Using no-op glClientActiveTexture for WebGL");
 #else
 	procptr_glClientActiveTextureARB = (PFNGLCLIENTACTIVETEXTUREARBPROC) SDL_GL_GetProcAddress("glClientActiveTextureARB");
 	if (!procptr_glClientActiveTextureARB)
