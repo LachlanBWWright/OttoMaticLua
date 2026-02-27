@@ -9,7 +9,7 @@ attribute vec2 aTexCoord1;
 
 uniform mat4 uMVPMatrix;        // Combined Model-View-Projection matrix
 uniform mat4 uModelViewMatrix;  // Model-View matrix for lighting calculations
-uniform mat3 uNormalMatrix;     // Normal transformation matrix
+uniform mediump mat3 uNormalMatrix;     // Normal transformation matrix
 
 // Lighting uniforms (up to 4 lights)
 uniform vec3 uAmbientLight;
