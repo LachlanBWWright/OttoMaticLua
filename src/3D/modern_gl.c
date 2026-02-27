@@ -169,9 +169,10 @@ static GLuint CompileShader(GLenum type, const char* source)
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
-        printf("[ModernGL] Shader compilation failed: %s\n", infoLog);
+        char infoLog[1024];
+        glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+        const char* shaderType = (type == GL_VERTEX_SHADER) ? "VERTEX" : "FRAGMENT";
+        printf("[ModernGL] %s shader compilation failed:\n%s\n", shaderType, infoLog);
         return 0;
     }
 
@@ -197,9 +198,21 @@ static GLuint LinkProgram(GLuint vertexShader, GLuint fragmentShader)
     glGetProgramiv(program, GL_LINK_STATUS, &success);
     if (!success)
     {
-        char infoLog[512];
-        glGetProgramInfoLog(program, 512, NULL, infoLog);
-        printf("[ModernGL] Program linking failed: %s\n", infoLog);
+        char infoLog[1024];
+        glGetProgramInfoLog(program, 1024, NULL, infoLog);
+        printf("[ModernGL] Program linking failed:\n%s\n", infoLog);
+
+        // Also validate the program to get more detailed error information
+        glValidateProgram(program);
+        GLint validateStatus;
+        glGetProgramiv(program, GL_VALIDATE_STATUS, &validateStatus);
+        if (!validateStatus)
+        {
+            char validateLog[1024];
+            glGetProgramInfoLog(program, 1024, NULL, validateLog);
+            printf("[ModernGL] Program validation failed:\n%s\n", validateLog);
+        }
+
         return 0;
     }
 
