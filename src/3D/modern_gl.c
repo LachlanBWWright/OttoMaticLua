@@ -11,6 +11,15 @@
 #include <math.h>
 #include <stdlib.h>
 #include <GLES2/gl2.h>
+#include <emscripten/html5.h>
+
+// IMPORTANT: #undef macros that redirect to the compat layer, so this file
+// can call the REAL GLES2 functions.  Without this, ModernGL_DrawGeometry
+// would recurse through CompatGL_DrawElements → ModernGL_DrawGeometry → ∞.
+#undef glDrawElements
+#undef glDrawArrays
+#undef glEnable
+#undef glDisable
 
 /****************************/
 /*    GLOBALS               */
@@ -231,6 +240,16 @@ static GLuint LinkProgram(GLuint vertexShader, GLuint fragmentShader)
 void ModernGL_Init(void)
 {
     printf("[ModernGL] Initializing modern GL subsystem...\n");
+
+    // Enable OES_element_index_uint extension for 32-bit index buffers in WebGL 1.0
+    // Without this, glDrawElements with GL_UNSIGNED_INT would fail.
+    {
+        EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_get_current_context();
+        if (ctx) {
+            EM_BOOL ok = emscripten_webgl_enable_extension(ctx, "OES_element_index_uint");
+            printf("[ModernGL] OES_element_index_uint: %s\n", ok ? "enabled" : "NOT available");
+        }
+    }
 
     // Initialize state
     memset(&gModernGLState, 0, sizeof(ModernGLState));
