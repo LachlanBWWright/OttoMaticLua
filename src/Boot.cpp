@@ -109,18 +109,16 @@ EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_WarpToCoord(float x, float y, flo
 	}
 }
 
-// Exported: get current player coordinates as packed floats
-// Returns pointer to static array [x, y, z, health, lives]
-static float sPlayerState[5];
-EMSCRIPTEN_KEEPALIVE extern "C" float* OttoMatic_GetPlayerState(void)
-{
-	sPlayerState[0] = gPlayerInfo.coord.x;
-	sPlayerState[1] = gPlayerInfo.coord.y;
-	sPlayerState[2] = gPlayerInfo.coord.z;
-	sPlayerState[3] = gPlayerInfo.health;
-	sPlayerState[4] = (float)gPlayerInfo.lives;
-	return sPlayerState;
-}
+// Exported: get player X coordinate
+EMSCRIPTEN_KEEPALIVE extern "C" float OttoMatic_GetPlayerX(void) { return gPlayerInfo.coord.x; }
+// Exported: get player Y coordinate
+EMSCRIPTEN_KEEPALIVE extern "C" float OttoMatic_GetPlayerY(void) { return gPlayerInfo.coord.y; }
+// Exported: get player Z coordinate
+EMSCRIPTEN_KEEPALIVE extern "C" float OttoMatic_GetPlayerZ(void) { return gPlayerInfo.coord.z; }
+// Exported: get player health (0.0–1.0)
+EMSCRIPTEN_KEEPALIVE extern "C" float OttoMatic_GetPlayerHealth(void) { return gPlayerInfo.health; }
+// Exported: get player remaining lives
+EMSCRIPTEN_KEEPALIVE extern "C" int OttoMatic_GetPlayerLives(void) { return gPlayerInfo.lives; }
 
 // Exported: skip to a specific level (triggers level completion then loads target)
 EMSCRIPTEN_KEEPALIVE extern "C" void OttoMatic_SkipToLevel(int level)

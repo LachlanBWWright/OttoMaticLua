@@ -321,7 +321,9 @@
       <div class="api-row"><code>OttoMatic_WarpToCoord(x, y, z)</code> — teleport player to world coordinates</div>
       <div class="api-row"><code>OttoMatic_SkipToLevel(3)</code> — skip to level 3 (0–9)</div>
       <div class="api-row"><code>OttoMatic_GetCurrentLevel()</code> — returns current level number</div>
-      <div class="api-row"><code>OttoMatic_GetPlayerState()</code> — returns ptr to [x, y, z, health, lives]</div>
+      <div class="api-row"><code>OttoMatic_GetPlayerX/Y/Z()</code> — returns player world coordinate</div>
+      <div class="api-row"><code>OttoMatic_GetPlayerHealth()</code> — returns health (0.0–1.0)</div>
+      <div class="api-row"><code>OttoMatic_GetPlayerLives()</code> — returns remaining lives</div>
       <div class="api-row"><code>OttoMatic_SetTerrainPath("/Data/Terrain/foo.ter")</code> — override terrain file for current level</div>
       <div class="api-row" style="margin-top:0.5rem">URL params: <code>?level=3</code> · <code>?terrain=/Data/Terrain/Custom.ter</code></div>
     </div>
@@ -544,14 +546,13 @@
       var span = document.getElementById('player-state');
       if (!span) return;
       try {
-        var ptr = Module.ccall('OttoMatic_GetPlayerState', 'number', [], []);
-        var x     = Module.HEAPF32[ptr / 4 + 0];
-        var y     = Module.HEAPF32[ptr / 4 + 1];
-        var z     = Module.HEAPF32[ptr / 4 + 2];
-        var hp    = Module.HEAPF32[ptr / 4 + 3];
-        var lives = Module.HEAPF32[ptr / 4 + 4];
+        var x     = Module.ccall('OttoMatic_GetPlayerX', 'number', [], []);
+        var y     = Module.ccall('OttoMatic_GetPlayerY', 'number', [], []);
+        var z     = Module.ccall('OttoMatic_GetPlayerZ', 'number', [], []);
+        var hp    = Module.ccall('OttoMatic_GetPlayerHealth', 'number', [], []);
+        var lives = Module.ccall('OttoMatic_GetPlayerLives', 'number', [], []);
         var lvl   = Module.ccall('OttoMatic_GetCurrentLevel', 'number', [], []);
-        span.textContent = 'Level ' + lvl + ' | Pos: (' + x.toFixed(0) + ', ' + y.toFixed(0) + ', ' + z.toFixed(0) + ') | HP: ' + (hp * 100).toFixed(0) + '% | Lives: ' + lives.toFixed(0);
+        span.textContent = 'Level ' + lvl + ' | Pos: (' + x.toFixed(0) + ', ' + y.toFixed(0) + ', ' + z.toFixed(0) + ') | HP: ' + (hp * 100).toFixed(0) + '% | Lives: ' + lives;
       } catch (e) {
         span.textContent = 'Not available yet';
       }
