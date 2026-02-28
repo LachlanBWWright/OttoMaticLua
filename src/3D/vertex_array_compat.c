@@ -26,7 +26,6 @@ static int gVertexArrayGeomCapacity = 0;
 // the index data to this IBO and use actual glDrawElements. This avoids
 // duplicating vertex data and lets the GPU vertex cache work properly.
 static GLuint gCompatIBO = 0;
-static int gCompatIBOCapacity = 0; // capacity in number of indices (GLuint)
 
 void CompatGL_EnableClientState(GLenum array)
 {
@@ -276,25 +275,16 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
     if (!gCompatIBO)
         glGenBuffers(1, &gCompatIBO);
 
-    // Convert indices to GLuint if needed and upload to IBO
+    // Upload index data to the persistent IBO
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gCompatIBO);
+
     if (type == GL_UNSIGNED_INT)
     {
-        if (count > gCompatIBOCapacity)
-        {
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gCompatIBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), indices, GL_DYNAMIC_DRAW);
-            gCompatIBOCapacity = count;
-        }
-        else
-        {
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gCompatIBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), indices, GL_DYNAMIC_DRAW);
-        }
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), indices, GL_DYNAMIC_DRAW);
     }
     else
     {
         // Convert unsigned short to unsigned int for the IBO
-        // Use the persistent upload buffer from ModernGL to avoid malloc
         static GLuint* sIdxBuf = NULL;
         static int sIdxBufCap = 0;
         if (count > sIdxBufCap)
@@ -307,10 +297,7 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
         for (int i = 0; i < count; i++)
             sIdxBuf[i] = (GLuint)src[i];
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gCompatIBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), sIdxBuf, GL_DYNAMIC_DRAW);
-        if (count > gCompatIBOCapacity)
-            gCompatIBOCapacity = count;
     }
 
     // Bind the VBO and set up vertex attribute pointers
