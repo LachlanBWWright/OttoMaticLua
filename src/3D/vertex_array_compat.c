@@ -189,9 +189,10 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
         return; // Unsupported index type
 
     // ── Find maximum index to determine vertex count ──────────────────
-    // This scan is still needed because glVertexPointer/glNormalPointer
-    // do not receive a count parameter.  The loop is ~0.01ms for typical
-    // index counts (~600) which is a small fraction of the total savings.
+    // This scan is still needed because the client-side vertex array
+    // functions (glVertexPointer, glNormalPointer, etc.) do not receive
+    // a count parameter.  The loop is ~0.01ms for typical index counts
+    // (~600) which is a small fraction of the total savings.
     GLuint maxIdx = 0;
     if (type == GL_UNSIGNED_INT)
     {

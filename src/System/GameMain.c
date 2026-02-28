@@ -317,7 +317,7 @@ static void PlayArea(void)
 		}
 
 #ifdef __EMSCRIPTEN__
-		/* Log frame timings to browser console every 120 frames (~2s at 60fps).
+		/* Log frame timings to browser console every 128 frames (~2s at 60fps).
 		 * This lets users profile performance via the browser DevTools console
 		 * without needing to toggle the in-game debug HUD.  The log includes
 		 * per-phase timings and draw-call / vertex / buffer-upload counts. */
