@@ -379,6 +379,13 @@
     var Module = {
       canvas: document.getElementById('canvas'),
 
+      // Request the high-performance (discrete/dedicated) GPU where available.
+      // Without this, browsers may default to the integrated GPU, causing poor
+      // frame rates even though the CPU is not the bottleneck.
+      webglContextAttributes: {
+        powerPreference: 'high-performance'
+      },
+
       // Pass level/terrain as C argc/argv when provided via URL params
       arguments: (function () {
         var a = [];
