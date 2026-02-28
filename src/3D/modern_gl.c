@@ -428,7 +428,15 @@ Boolean ModernGL_LoadShaders(void)
 
 void ModernGL_UseShader(void)
 {
-    glUseProgram(gModernGLShader.program);
+    // Since there is only one shader program, skip the glUseProgram call
+    // when the program is already bound.  This avoids one WebGL state
+    // change per draw call (~200/frame).
+    static GLuint sCurrentProgram = 0;
+    if (sCurrentProgram != gModernGLShader.program)
+    {
+        glUseProgram(gModernGLShader.program);
+        sCurrentProgram = gModernGLShader.program;
+    }
 }
 
 void ModernGL_UpdateUniforms(void)
@@ -768,8 +776,11 @@ void ModernGL_EndImmediateMode(void)
         return;
 
     // Immediate mode always has per-vertex color baked in
-    gModernGLState.useVertexColor = true;
-    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
+    if (!gModernGLState.useVertexColor)
+    {
+        gModernGLState.useVertexColor = true;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
+    }
 
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
