@@ -672,6 +672,10 @@ do_anaglyph:
 			debugString,
 			sizeof(debugString),
 			"fps:\t\t%d\n"
+			"frame:\t\t%.2fms\n"
+			"update:\t\t%.2fms\n"
+			"terrain:\t%.2fms\n"
+			"render:\t\t%.2fms\n"
 			"tris:\t\t%d\n"
 			"\n"
 			"input x:\t%.3f\n"
@@ -705,6 +709,10 @@ do_anaglyph:
 			"\n\n\n\n\n\n\n\nOtto Matic %s, SDL %s\n%s, OpenGL %s, %s"
 			,
 			(int)(gFramesPerSecond+.5f),
+			(gFramesPerSecond > 0.0f ? 1000.0f / gFramesPerSecond : 0.0f),
+			gLoopUpdateTimeMs,
+			gLoopTerrainTimeMs,
+			gLoopRenderTimeMs,
 			gPolysThisFrame,
 			gPlayerInfo.analogControlX,
 			gPlayerInfo.analogControlZ,

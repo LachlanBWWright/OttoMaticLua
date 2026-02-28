@@ -73,6 +73,10 @@ OGLColorRGBA		gFireIceColor = {.7, .6, .6,1};
 
 uint32_t			gGameFrameNum = 0;
 
+float				gLoopUpdateTimeMs = 0;
+float				gLoopTerrainTimeMs = 0;
+float				gLoopRenderTimeMs = 0;
+
 Boolean				gPlayingFromSavedGame = false;
 Boolean				gGameOver = false;
 Boolean				gLevelCompleted = false;
@@ -244,6 +248,10 @@ static void PlayGame(void)
 
 static void PlayArea(void)
 {
+	/* Frequency in ticks-per-ms for loop phase timing; cached after first call. */
+	static float sPerfFreqMs = 0;
+	if (sPerfFreqMs == 0)
+		sPerfFreqMs = (float)SDL_GetPerformanceFrequency() / 1000.0f;
 
 			/* PREP STUFF */
 
@@ -273,18 +281,32 @@ static void PlayArea(void)
 
 				/* MOVE OBJECTS */
 
-		MoveEverything();
+		{
+			uint64_t t0 = SDL_GetPerformanceCounter();
+			MoveEverything();
+			uint64_t t1 = SDL_GetPerformanceCounter();
+			gLoopUpdateTimeMs = (t1 - t0) / sPerfFreqMs;
+		}
 
 
 			/* UPDATE THE TERRAIN */
 
-		DoPlayerTerrainUpdate(gPlayerInfo.camera.cameraLocation.x, gPlayerInfo.camera.cameraLocation.z);
+		{
+			uint64_t t0 = SDL_GetPerformanceCounter();
+			DoPlayerTerrainUpdate(gPlayerInfo.camera.cameraLocation.x, gPlayerInfo.camera.cameraLocation.z);
+			uint64_t t1 = SDL_GetPerformanceCounter();
+			gLoopTerrainTimeMs = (t1 - t0) / sPerfFreqMs;
+		}
 
 
 			/* DRAW IT ALL */
 
-
-		OGL_DrawScene(DrawObjects);
+		{
+			uint64_t t0 = SDL_GetPerformanceCounter();
+			OGL_DrawScene(DrawObjects);
+			uint64_t t1 = SDL_GetPerformanceCounter();
+			gLoopRenderTimeMs = (t1 - t0) / sPerfFreqMs;
+		}
 
 
 
