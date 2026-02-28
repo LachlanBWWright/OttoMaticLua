@@ -278,6 +278,16 @@ SkeletonObjDataType	*currentSkelObjData;
 
 	UpdateSkinnedGeometry_Recurse(0, skelType);											// start @ base
 
+#ifdef __EMSCRIPTEN__
+				/* INVALIDATE VBO CACHES FOR ALL TRI-MESHES */
+
+	{
+		int numMeshes = gCurrentSkeleton->numDecomposedTriMeshes;
+		for (int m = 0; m < numMeshes; m++)
+			gCurrentSkeleton->decomposedTriMeshes[m]._gpuCacheVersion++;
+	}
+#endif
+
 
 				/* BUILD A LOCAL BBOX */
 				//

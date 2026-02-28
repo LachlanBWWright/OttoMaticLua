@@ -918,4 +918,170 @@ void ModernGL_Matrix3x3FromMatrix4x4(const OGLMatrix4x4* in, float* out)
     out[6] = in->value[M02]; out[7] = in->value[M12]; out[8] = in->value[M22];
 }
 
+/****************************/
+/*    VBO CACHE MANAGEMENT  */
+/****************************/
+
+// Interleave vertex data from MOVertexArrayData-style separate arrays into
+// an interleaved buffer, then upload to the given VBO.  Shared by both
+// create and update paths.
+static void InterleaveAndUploadVBO(
+    GLuint vbo, GLenum usage,
+    int numPoints,
+    const void* points, const void* normals, const void* uvs0,
+    const void* colorsByte, const void* colorsFloat, Boolean hasVertexColor)
+{
+    int floatsPerVertex = 14; // pos(3) + norm(3) + color(4) + uv0(2) + uv1(2)
+    int totalFloats = numPoints * floatsPerVertex;
+
+    // Reuse persistent staging buffer
+    if (totalFloats > gUploadBufferCapacity)
+    {
+        free(gUploadBuffer);
+        gUploadBuffer = (GLfloat*)malloc(totalFloats * sizeof(GLfloat));
+        if (!gUploadBuffer)
+        {
+            gUploadBufferCapacity = 0;
+            return;
+        }
+        gUploadBufferCapacity = totalFloats;
+    }
+    GLfloat* buf = gUploadBuffer;
+
+    const GLfloat* ptsF    = (const GLfloat*)points;
+    const GLfloat* normF   = (const GLfloat*)normals;
+    const GLfloat* uvsF    = (const GLfloat*)uvs0;
+    const GLfloat* colF    = (const GLfloat*)colorsFloat;
+    const GLubyte* colB    = (const GLubyte*)colorsByte;
+
+    for (int i = 0; i < numPoints; i++)
+    {
+        int off = i * floatsPerVertex;
+
+        // Position
+        buf[off + 0] = ptsF[i * 3 + 0];
+        buf[off + 1] = ptsF[i * 3 + 1];
+        buf[off + 2] = ptsF[i * 3 + 2];
+
+        // Normal
+        if (normF)
+        {
+            buf[off + 3] = normF[i * 3 + 0];
+            buf[off + 4] = normF[i * 3 + 1];
+            buf[off + 5] = normF[i * 3 + 2];
+        }
+        else
+        {
+            buf[off + 3] = 0.0f;
+            buf[off + 4] = 1.0f;
+            buf[off + 5] = 0.0f;
+        }
+
+        // Color
+        if (hasVertexColor && colF)
+        {
+            buf[off + 6] = colF[i * 4 + 0];
+            buf[off + 7] = colF[i * 4 + 1];
+            buf[off + 8] = colF[i * 4 + 2];
+            buf[off + 9] = colF[i * 4 + 3];
+        }
+        else if (hasVertexColor && colB)
+        {
+            buf[off + 6] = colB[i * 4 + 0] / 255.0f;
+            buf[off + 7] = colB[i * 4 + 1] / 255.0f;
+            buf[off + 8] = colB[i * 4 + 2] / 255.0f;
+            buf[off + 9] = colB[i * 4 + 3] / 255.0f;
+        }
+        else
+        {
+            buf[off + 6] = 1.0f;
+            buf[off + 7] = 1.0f;
+            buf[off + 8] = 1.0f;
+            buf[off + 9] = 1.0f;
+        }
+
+        // TexCoord0
+        if (uvsF)
+        {
+            buf[off + 10] = uvsF[i * 2 + 0];
+            buf[off + 11] = uvsF[i * 2 + 1];
+        }
+        else
+        {
+            buf[off + 10] = 0.0f;
+            buf[off + 11] = 0.0f;
+        }
+
+        // TexCoord1 (unused for single-texture, but stride must match)
+        buf[off + 12] = 0.0f;
+        buf[off + 13] = 0.0f;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, totalFloats * sizeof(GLfloat), buf, usage);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+ModernGLGeometry* ModernGL_CreateVBOCacheFromVertexArray(
+    int numPoints, int numTriangles,
+    const void* points, const void* normals, const void* uvs0,
+    const void* colorsByte, const void* colorsFloat,
+    const void* triangles, Boolean hasVertexColor)
+{
+    ModernGLGeometry* geom = (ModernGLGeometry*)malloc(sizeof(ModernGLGeometry));
+    memset(geom, 0, sizeof(ModernGLGeometry));
+
+    geom->numVertices = numPoints;
+    geom->numIndices = numTriangles * 3;
+    geom->dynamic = false;
+    geom->needsUpload = false;
+
+    // Create GPU buffers (no CPU-side buffers needed for the cache)
+    glGenBuffers(1, &geom->vbo);
+    glGenBuffers(1, &geom->ibo);
+
+    // Upload vertex data
+    InterleaveAndUploadVBO(geom->vbo, GL_DYNAMIC_DRAW, numPoints,
+        points, normals, uvs0, colorsByte, colorsFloat, hasVertexColor);
+
+    // Upload index data (convert from MOTriangleIndecies GLuint[3] to flat GLuint array)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, geom->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, geom->numIndices * sizeof(GLuint),
+                 triangles, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    return geom;
+}
+
+void ModernGL_UpdateVBOCache(ModernGLGeometry* geom,
+    int numPoints, const void* points, const void* normals,
+    const void* uvs0, const void* colorsByte, const void* colorsFloat,
+    Boolean hasVertexColor)
+{
+    geom->numVertices = numPoints;
+
+    // Re-upload vertex data only (IBO never changes)
+    InterleaveAndUploadVBO(geom->vbo, GL_DYNAMIC_DRAW, numPoints,
+        points, normals, uvs0, colorsByte, colorsFloat, hasVertexColor);
+}
+
+void ModernGL_DrawCachedVBO(ModernGLGeometry* geom)
+{
+    // Bind VBO and set up attribute pointers (interleaved: 14 floats per vertex)
+    glBindBuffer(GL_ARRAY_BUFFER, geom->vbo);
+    int stride = 14 * sizeof(GLfloat);
+    glVertexAttribPointer(ATTRIB_LOCATION_POSITION,  3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+    glVertexAttribPointer(ATTRIB_LOCATION_NORMAL,    3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(GLfloat)));
+    glVertexAttribPointer(ATTRIB_LOCATION_COLOR,     4, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(GLfloat)));
+    glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, stride, (void*)(10 * sizeof(GLfloat)));
+    glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(12 * sizeof(GLfloat)));
+
+    // Draw with cached IBO
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, geom->ibo);
+    glDrawElements(GL_TRIANGLES, geom->numIndices, GL_UNSIGNED_INT, 0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
 #endif // __EMSCRIPTEN__

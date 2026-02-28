@@ -469,6 +469,10 @@ void TextMesh_Update(const char* text, int align, ObjNode* textNode)
 	}
 
 	GAME_ASSERT(p == mesh->numPoints);
+
+#ifdef __EMSCRIPTEN__
+	mesh->_gpuCacheVersion++;	// text data changed
+#endif
 }
 
 /***************************************************************/
