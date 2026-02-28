@@ -29,6 +29,11 @@ ModernGLShaderProgram gModernGLShader;
 ModernGLState gModernGLState;
 ImmediateModeBuffer gImmediateModeBuffer;
 
+// Persistent interleaved vertex buffer used by ModernGL_UploadGeometry.
+// Avoids a per-draw-call malloc/free for the temporary staging data.
+static GLfloat* gUploadBuffer = NULL;
+static int gUploadBufferCapacity = 0; // capacity in floats
+
 /****************************/
 /*    SHADER SOURCE         */
 /****************************/
@@ -466,17 +471,21 @@ ModernGLGeometry* ModernGL_CreateGeometry(int numVertices, int numIndices, Boole
 
 void ModernGL_UploadGeometry(ModernGLGeometry* geom)
 {
-    // For now, we'll use separate VBOs for each attribute
-    // A more optimized approach would interleave the data
-    // But this is simpler for the initial implementation
-
-    // We'll pack all vertex data into a single VBO with this layout:
-    // positions (3 floats per vertex) + normals (3) + colors (4) + texCoords0 (2) + texCoords1 (2)
+    // Pack all vertex data into a single interleaved VBO with this layout:
+    // positions (3 floats) + normals (3) + colors (4) + texCoords0 (2) + texCoords1 (2)
     // Total: 14 floats per vertex
 
     int floatsPerVertex = 14;
     int totalFloats = geom->numVertices * floatsPerVertex;
-    GLfloat* interleavedData = (GLfloat*)malloc(totalFloats * sizeof(GLfloat));
+
+    // Reuse a persistent staging buffer to avoid per-upload malloc/free churn.
+    if (totalFloats > gUploadBufferCapacity)
+    {
+        free(gUploadBuffer);
+        gUploadBuffer = (GLfloat*)malloc(totalFloats * sizeof(GLfloat));
+        gUploadBufferCapacity = totalFloats;
+    }
+    GLfloat* interleavedData = gUploadBuffer;
 
     for (int i = 0; i < geom->numVertices; i++)
     {
@@ -506,8 +515,6 @@ void ModernGL_UploadGeometry(ModernGLGeometry* geom)
     GLenum usage = geom->dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
     glBufferData(GL_ARRAY_BUFFER, totalFloats * sizeof(GLfloat), interleavedData, usage);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    free(interleavedData);
 
     // Upload index buffer if present
     if (geom->numIndices > 0)
