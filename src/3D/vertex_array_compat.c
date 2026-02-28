@@ -7,6 +7,7 @@
 
 #include "game.h"
 #include <string.h>
+#include <GLES2/gl2.h>
 
 // #undef the macro so we can call the real glDrawElements for indexed drawing.
 // Our CompatGL_DrawElements implementation sets up the VBO + IBO and calls the
