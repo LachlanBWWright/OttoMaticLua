@@ -308,9 +308,11 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
         // Convert ushort indices to uint (required for OES_element_index_uint)
         if (count > sIdxConvertBufCap)
         {
+            int newCap = count > sIdxConvertBufCap * 2 ? count : sIdxConvertBufCap * 2;
+            if (newCap < 256) newCap = 256;
             free(sIdxConvertBuf);
-            sIdxConvertBuf = (GLuint*)malloc(count * sizeof(GLuint));
-            sIdxConvertBufCap = count;
+            sIdxConvertBuf = (GLuint*)malloc(newCap * sizeof(GLuint));
+            sIdxConvertBufCap = newCap;
         }
         const GLushort* src = (const GLushort*)indices;
         for (GLsizei i = 0; i < count; i++)
