@@ -939,6 +939,11 @@ static void InterleaveAndUploadVBO(
     {
         free(gUploadBuffer);
         gUploadBuffer = (GLfloat*)malloc(totalFloats * sizeof(GLfloat));
+        if (!gUploadBuffer)
+        {
+            gUploadBufferCapacity = 0;
+            return;
+        }
         gUploadBufferCapacity = totalFloats;
     }
     GLfloat* buf = gUploadBuffer;
