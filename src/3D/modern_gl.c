@@ -308,6 +308,16 @@ void ModernGL_Init(void)
         printf("[ModernGL] ERROR: Failed to load shaders!\n");
     }
 
+    // Enable all vertex attribute arrays once — we use a single shader program
+    // with a fixed interleaved layout, so there is no reason to toggle these
+    // per draw call.  Removing the per-draw glEnableVertexAttribArray /
+    // glDisableVertexAttribArray saves 10 WebGL state changes per draw call.
+    glEnableVertexAttribArray(ATTRIB_LOCATION_POSITION);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_NORMAL);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_COLOR);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD0);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD1);
+
     printf("[ModernGL] Initialization complete\n");
 }
 
@@ -589,13 +599,6 @@ void ModernGL_DrawGeometry(ModernGLGeometry* geom, GLenum mode)
     glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, stride, (void*)(10 * sizeof(GLfloat)));
     glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(12 * sizeof(GLfloat)));
 
-    // Enable vertex attributes
-    glEnableVertexAttribArray(ATTRIB_LOCATION_POSITION);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_NORMAL);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_COLOR);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD0);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD1);
-
     // Draw
     if (geom->numIndices > 0)
     {
@@ -607,13 +610,6 @@ void ModernGL_DrawGeometry(ModernGLGeometry* geom, GLenum mode)
     {
         glDrawArrays(mode, 0, geom->numVertices);
     }
-
-    // Disable vertex attributes
-    glDisableVertexAttribArray(ATTRIB_LOCATION_POSITION);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_NORMAL);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_COLOR);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD0);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD1);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }

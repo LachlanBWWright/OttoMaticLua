@@ -76,6 +76,11 @@ static MatrixStack gProjectionStack;
 static MatrixStack gTextureStack;
 static MatrixStack* gCurrentStack = &gModelViewStack;
 static Boolean gMatrixStacksInitialized = false;
+// True when any matrix stack has been modified since the last
+// CompatGL_UpdateShaderState call. This avoids redundant 4×4 matrix
+// multiplications on every draw call when only the material or other
+// non-matrix state has changed.
+static Boolean gMatrixStacksDirty = true;
 
 static void EnsureMatrixStacksInitialized(void)
 {
@@ -429,6 +434,7 @@ void CompatGL_LoadMatrix(const GLfloat* m)
     if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
     {
         memcpy(gCurrentStack->matrices[gCurrentStack->depth], m, 16 * sizeof(float));
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -437,6 +443,7 @@ void CompatGL_LoadIdentity(void)
     if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
     {
         Matrix4x4Identity(gCurrentStack->matrices[gCurrentStack->depth]);
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -447,6 +454,7 @@ void CompatGL_MultMatrix(const GLfloat* m)
         float result[16];
         Matrix4x4Multiply(gCurrentStack->matrices[gCurrentStack->depth], m, result);
         memcpy(gCurrentStack->matrices[gCurrentStack->depth], result, 16 * sizeof(float));
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -458,6 +466,7 @@ void CompatGL_PushMatrix(void)
                gCurrentStack->matrices[gCurrentStack->depth],
                16 * sizeof(float));
         gCurrentStack->depth++;
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -466,6 +475,7 @@ void CompatGL_PopMatrix(void)
     if (gCurrentStack->depth > 0)
     {
         gCurrentStack->depth--;
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -556,24 +566,32 @@ void CompatGL_UpdateShaderState(void)
     extern float gGlobalTransparency;
     extern OGLColorRGB gGlobalColorFilter;
 
-    // Compute MVP matrix
-    float mvp[16];
-    Matrix4x4Multiply(gProjectionStack.matrices[gProjectionStack.depth],
-                      gModelViewStack.matrices[gModelViewStack.depth],
-                      mvp);
+    // Only recompute MVP, normal matrix, and texture matrix when the matrix
+    // stacks have actually changed.  This turns an O(draws) matrix multiply
+    // into O(matrix-changes), which is typically 1-2 per frame vs 200+.
+    if (gMatrixStacksDirty)
+    {
+        // Compute MVP matrix
+        float mvp[16];
+        Matrix4x4Multiply(gProjectionStack.matrices[gProjectionStack.depth],
+                          gModelViewStack.matrices[gModelViewStack.depth],
+                          mvp);
 
-    // Extract 3x3 normal matrix from model-view
-    float normalMatrix[9];
-    const float* mv = gModelViewStack.matrices[gModelViewStack.depth];
-    normalMatrix[0] = mv[0]; normalMatrix[1] = mv[1]; normalMatrix[2] = mv[2];
-    normalMatrix[3] = mv[4]; normalMatrix[4] = mv[5]; normalMatrix[5] = mv[6];
-    normalMatrix[6] = mv[8]; normalMatrix[7] = mv[9]; normalMatrix[8] = mv[10];
+        // Extract 3x3 normal matrix from model-view
+        float normalMatrix[9];
+        const float* mv = gModelViewStack.matrices[gModelViewStack.depth];
+        normalMatrix[0] = mv[0]; normalMatrix[1] = mv[1]; normalMatrix[2] = mv[2];
+        normalMatrix[3] = mv[4]; normalMatrix[4] = mv[5]; normalMatrix[5] = mv[6];
+        normalMatrix[6] = mv[8]; normalMatrix[7] = mv[9]; normalMatrix[8] = mv[10];
 
-    // Update matrices in shader state
-    ModernGL_SetMatrices(mvp, gModelViewStack.matrices[gModelViewStack.depth], normalMatrix);
+        // Update matrices in shader state
+        ModernGL_SetMatrices(mvp, gModelViewStack.matrices[gModelViewStack.depth], normalMatrix);
 
-    // Update texture matrix
-    ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
+        // Update texture matrix
+        ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
+
+        gMatrixStacksDirty = false;
+    }
 
     // Sync GL_TEXTURE_2D state to shader texture flags
     if (gModernGLState.useTexture0 != gTexture2DEnabled[0]
