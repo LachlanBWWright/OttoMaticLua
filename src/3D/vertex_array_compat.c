@@ -236,6 +236,7 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
     // Sync vertex color state to shader
     extern ModernGLState gModernGLState;
     gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
 
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
@@ -312,6 +313,7 @@ void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
     // Sync vertex color state to shader
     extern ModernGLState gModernGLState;
     gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
 
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);

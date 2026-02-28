@@ -168,7 +168,10 @@ void CompatGL_Enable(GLenum cap)
             int idx = cap - GL_LIGHT0;
             extern ModernGLState gModernGLState;
             if (idx >= 0 && idx < 4 && idx >= gModernGLState.numLights)
+            {
                 gModernGLState.numLights = idx + 1;
+                gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
+            }
             break;
         }
 
@@ -213,6 +216,7 @@ void CompatGL_Disable(GLenum cap)
             // Reset sphere map when texture generation is disabled
             extern ModernGLState gModernGLState;
             gModernGLState.useSphereMap = false;
+            gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
             break;
         }
 
@@ -262,6 +266,7 @@ void CompatGL_Fog(GLenum pname, GLfloat param)
             gModernGLState.fogDensity = param;
             break;
     }
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
 }
 
 void CompatGL_Fogfv(GLenum pname, const GLfloat* params)
@@ -273,6 +278,7 @@ void CompatGL_Fogfv(GLenum pname, const GLfloat* params)
         gModernGLState.fogColor[0] = params[0];
         gModernGLState.fogColor[1] = params[1];
         gModernGLState.fogColor[2] = params[2];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
     }
 }
 
@@ -288,6 +294,7 @@ void CompatGL_Fogi(GLenum pname, GLint param)
             case GL_EXP: gModernGLState.fogMode = 1; break;
             case GL_EXP2: gModernGLState.fogMode = 2; break;
         }
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
     }
 }
 
@@ -312,12 +319,14 @@ void CompatGL_Light(GLenum light, GLenum pname, const GLfloat* params)
             gModernGLState.lightDirection[lightIndex][1] /= len;
             gModernGLState.lightDirection[lightIndex][2] /= len;
         }
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
     else if (pname == GL_DIFFUSE)
     {
         gModernGLState.lightColor[lightIndex][0] = params[0];
         gModernGLState.lightColor[lightIndex][1] = params[1];
         gModernGLState.lightColor[lightIndex][2] = params[2];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
 }
 
@@ -330,6 +339,7 @@ void CompatGL_LightModelfv(GLenum pname, const GLfloat* params)
         gModernGLState.ambientLight[0] = params[0];
         gModernGLState.ambientLight[1] = params[1];
         gModernGLState.ambientLight[2] = params[2];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
 }
 
@@ -343,6 +353,7 @@ void CompatGL_Material(GLenum face, GLenum pname, const GLfloat* params)
         gModernGLState.materialColor[1] = params[1];
         gModernGLState.materialColor[2] = params[2];
         gModernGLState.materialColor[3] = params[3];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
     }
 }
 
@@ -363,11 +374,13 @@ void CompatGL_TexEnvi(GLenum target, GLenum pname, GLint param)
                 gModernGLState.multiTextureCombine = 1;
                 break;
         }
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
     }
     else if (pname == GL_COMBINE_RGB)
     {
         if (param == GL_ADD)
             gModernGLState.multiTextureCombine = 1;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
     }
 }
 
@@ -378,6 +391,7 @@ void CompatGL_TexGeni(GLenum coord, GLenum pname, GLint param)
     if (pname == GL_TEXTURE_GEN_MODE && param == GL_SPHERE_MAP)
     {
         gModernGLState.useSphereMap = true;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
     }
 }
 
@@ -562,14 +576,26 @@ void CompatGL_UpdateShaderState(void)
     ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
 
     // Sync GL_TEXTURE_2D state to shader texture flags
-    gModernGLState.useTexture0 = gTexture2DEnabled[0];
-    gModernGLState.useTexture1 = gTexture2DEnabled[1];
+    if (gModernGLState.useTexture0 != gTexture2DEnabled[0]
+        || gModernGLState.useTexture1 != gTexture2DEnabled[1])
+    {
+        gModernGLState.useTexture0 = gTexture2DEnabled[0];
+        gModernGLState.useTexture1 = gTexture2DEnabled[1];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
+    }
 
     // Sync game global transparency & color filter to shader state
-    gModernGLState.globalTransparency = gGlobalTransparency;
-    gModernGLState.globalColorFilter[0] = gGlobalColorFilter.r;
-    gModernGLState.globalColorFilter[1] = gGlobalColorFilter.g;
-    gModernGLState.globalColorFilter[2] = gGlobalColorFilter.b;
+    if (gModernGLState.globalTransparency != gGlobalTransparency
+        || gModernGLState.globalColorFilter[0] != gGlobalColorFilter.r
+        || gModernGLState.globalColorFilter[1] != gGlobalColorFilter.g
+        || gModernGLState.globalColorFilter[2] != gGlobalColorFilter.b)
+    {
+        gModernGLState.globalTransparency = gGlobalTransparency;
+        gModernGLState.globalColorFilter[0] = gGlobalColorFilter.r;
+        gModernGLState.globalColorFilter[1] = gGlobalColorFilter.g;
+        gModernGLState.globalColorFilter[2] = gGlobalColorFilter.b;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_GLOBALS;
+    }
 
     // Update fog state
     ModernGL_SetFog(gFogEnabled, gModernGLState.fogMode, gModernGLState.fogStart,
@@ -579,7 +605,7 @@ void CompatGL_UpdateShaderState(void)
     // Update alpha test
     ModernGL_SetAlphaTest(gAlphaTestEnabled, gAlphaFunc, gAlphaRef);
 
-    // Use shader and update all uniforms
+    // Use shader and update only dirty uniforms
     ModernGL_UseShader();
     ModernGL_UpdateUniforms();
 }

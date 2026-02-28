@@ -1323,23 +1323,17 @@ uint32_t	a;
 
 void OGL_Texture_SetOpenGLTexture(GLuint textureName)
 {
-#ifdef __EMSCRIPTEN__
-	// Clear any pending GL errors left by Emscripten's LEGACY_GL_EMULATION
-	// (e.g. INVALID_ENUM from getParameter with unsupported enums).
-	// These are harmless side-effects of the emulation layer, not real errors.
-	while (glGetError() != GL_NO_ERROR) {}
-#endif
-
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+#ifndef __EMSCRIPTEN__
 	if (OGL_CheckError())
 		DoFatalAlert("OGL_Texture_SetOpenGLTexture: glPixelStorei failed!");
+#endif
 
 	glBindTexture(GL_TEXTURE_2D, textureName);
+#ifndef __EMSCRIPTEN__
 	if (OGL_CheckError())
 		DoFatalAlert("OGL_Texture_SetOpenGLTexture: glBindTexture failed!");
-
-
-	glGetError();
+#endif
 
 	glEnable(GL_TEXTURE_2D);
 }
