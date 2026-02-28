@@ -698,10 +698,6 @@ do_anaglyph:
 			"\n"
 			"heap:\t\t%dK, %dp\n"
 			"vram:\t\t%dK\n"
-#ifdef __EMSCRIPTEN__
-			"vbo cache:\t%u hit, %u miss, %u upd\n"
-			"draw calls:\t%u\n"
-#endif
 #if 0
 			"\n"
 			"time since last thrust:\t%.3f\n"
@@ -741,10 +737,6 @@ do_anaglyph:
 			(int) (Pomme_GetHeapSize()/1024),
 			(int) Pomme_GetNumAllocs(),
 			gVRAMUsedThisFrame/1024,
-#ifdef __EMSCRIPTEN__
-			gVBOCacheHits, gVBOCacheMisses, gVBOCacheUpdates,
-			gDrawCallsThisFrame,
-#endif
 #if 0
 			gTimeSinceLastThrust,
 			gForceCameraAlignment? 'Y': 'N',

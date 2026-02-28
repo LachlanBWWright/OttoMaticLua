@@ -234,16 +234,4 @@ void ModernGL_ImmediateVertex(float x, float y, float z);
 void ModernGL_Matrix4x4ToFloat16(const OGLMatrix4x4* in, float* out);
 void ModernGL_Matrix3x3FromMatrix4x4(const OGLMatrix4x4* in, float* out);
 
-// VBO cache management for MOVertexArrayData (avoids per-draw-call re-upload)
-ModernGLGeometry* ModernGL_CreateVBOCacheFromVertexArray(
-    int numPoints, int numTriangles,
-    const void* points, const void* normals, const void* uvs0,
-    const void* colorsByte, const void* colorsFloat,
-    const void* triangles, Boolean hasVertexColor);
-void ModernGL_UpdateVBOCache(ModernGLGeometry* geom,
-    int numPoints, const void* points, const void* normals,
-    const void* uvs0, const void* colorsByte, const void* colorsFloat,
-    Boolean hasVertexColor);
-void ModernGL_DrawCachedVBO(ModernGLGeometry* geom);
-
 #endif // __EMSCRIPTEN__

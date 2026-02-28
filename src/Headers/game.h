@@ -217,12 +217,6 @@ extern	float					gFramesPerSecondFrac;
 extern	float					gLoopUpdateTimeMs;
 extern	float					gLoopTerrainTimeMs;
 extern	float					gLoopRenderTimeMs;
-#ifdef __EMSCRIPTEN__
-extern	uint32_t				gVBOCacheHits;
-extern	uint32_t				gVBOCacheMisses;
-extern	uint32_t				gVBOCacheUpdates;
-extern	uint32_t				gDrawCallsThisFrame;
-#endif
 extern	float					gGammaFadeFrac;
 extern	float					gGlobalTransparency;
 extern	float					gGravity;

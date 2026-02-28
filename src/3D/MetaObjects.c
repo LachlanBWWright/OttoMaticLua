@@ -54,13 +54,6 @@ uint32_t			gGlobalMaterialFlags = 0;
 
 MOMaterialObject	*gMostRecentMaterial;
 
-#ifdef __EMSCRIPTEN__
-uint32_t			gVBOCacheHits = 0;
-uint32_t			gVBOCacheMisses = 0;
-uint32_t			gVBOCacheUpdates = 0;
-uint32_t			gDrawCallsThisFrame = 0;
-#endif
-
 
 /***************** INIT META OBJECT HANDLER ******************/
 
@@ -337,12 +330,6 @@ int	i;
 			/* INIT THE DATA */
 
 	geoObj->objectData = *data;									// copy from input data
-
-#ifdef __EMSCRIPTEN__
-	geoObj->objectData._gpuGeometryCache = nil;					// new object gets its own cache
-	geoObj->objectData._gpuCacheVersion = 0;
-	geoObj->objectData._gpuCacheUploadedVersion = 0;
-#endif
 
 
 		/* INCREASE MATERIAL REFERENCE COUNTS */
@@ -916,80 +903,12 @@ go_here:
 			/* DRAW IT */
 			/***********/
 
-#ifdef __EMSCRIPTEN__
-	{
-		//
-		// VBO CACHING: Instead of going through the compat layer (which converts
-		// client-side vertex arrays to VBOs on EVERY draw call), we cache the
-		// VBO/IBO per MOVertexArrayData.  Static geometry uploads once; dynamic
-		// geometry (skeletons, UV scrolling) re-uploads only when the version
-		// counter changes.
-		//
-
-		// Determine if we have per-vertex colors
-		Boolean hasVertexColor = (data->colorsFloat != nil || data->colorsByte != nil);
-
-		// Sync vertex color state to shader (normally done in CompatGL_DrawElements)
-		extern ModernGLState gModernGLState;
-		gModernGLState.useVertexColor = hasVertexColor;
-		gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
-
-		// Update shader state (matrices, lighting, textures, etc.)
-		CompatGL_UpdateShaderState();
-
-		// Cast away const for cache management (the cache fields are mutable metadata)
-		MOVertexArrayData *mutableData = (MOVertexArrayData *)data;
-
-		ModernGLGeometry *cache = (ModernGLGeometry *)mutableData->_gpuGeometryCache;
-
-		// Check if geometry size changed (particles resize every frame)
-		if (cache && (cache->numVertices != data->numPoints || cache->numIndices != data->numTriangles * 3))
-		{
-			ModernGL_FreeGeometry(cache);
-			cache = nil;
-			mutableData->_gpuGeometryCache = nil;
-		}
-
-		if (!cache)
-		{
-			// First draw or size changed: create the VBO cache
-			cache = ModernGL_CreateVBOCacheFromVertexArray(
-				data->numPoints, data->numTriangles,
-				data->points, data->normals, data->uvs[0],
-				data->colorsByte, data->colorsFloat,
-				data->triangles, hasVertexColor);
-			mutableData->_gpuGeometryCache = cache;
-			mutableData->_gpuCacheUploadedVersion = mutableData->_gpuCacheVersion;
-			gVBOCacheMisses++;
-		}
-		else if (mutableData->_gpuCacheVersion != mutableData->_gpuCacheUploadedVersion)
-		{
-			// Data changed (skeleton animation, UV scrolling, terrain deformation): re-upload VBO
-			ModernGL_UpdateVBOCache(cache,
-				data->numPoints, data->points, data->normals,
-				data->uvs[0], data->colorsByte, data->colorsFloat,
-				hasVertexColor);
-			mutableData->_gpuCacheUploadedVersion = mutableData->_gpuCacheVersion;
-			gVBOCacheUpdates++;
-		}
-		else
-		{
-			gVBOCacheHits++;
-		}
-
-		gDrawCallsThisFrame++;
-
-		// Draw using cached VBO/IBO (calls the real glDrawElements, not the compat wrapper)
-		ModernGL_DrawCachedVBO(cache);
-	}
-#else
 //	glLockArraysEXT(0, data->numPoints);
 	glDrawElements(GL_TRIANGLES,data->numTriangles*3,GL_UNSIGNED_INT,&data->triangles[0]);
 
 	if (OGL_CheckError())
 		DoFatalAlert("MO_DrawGeometry_VertexArray: glDrawElements");
 //	glUnlockArraysEXT();
-#endif
 
 	gPolysThisFrame += data->numPoints;					// inc poly counter
 
@@ -1430,16 +1349,6 @@ int					i,n;
 
 void MO_DeleteObjectInfo_Geometry_VertexArray(MOVertexArrayData *data)
 {
-#ifdef __EMSCRIPTEN__
-		/* FREE GPU CACHE */
-
-	if (data->_gpuGeometryCache)
-	{
-		ModernGL_FreeGeometry((ModernGLGeometry *)data->_gpuGeometryCache);
-		data->_gpuGeometryCache = nil;
-	}
-#endif
-
 		/* DISPOSE OF VARIOUS ARRAYS */
 
 	if (data->points)
@@ -1511,13 +1420,6 @@ MOMaterialData		*data = &obj->objectData;
 void MO_DuplicateVertexArrayData(MOVertexArrayData *inData, MOVertexArrayData *outData)
 {
 int	i,n,s;
-
-#ifdef __EMSCRIPTEN__
-	outData->_gpuGeometryCache = nil;		// new copy gets its own cache
-	outData->_gpuCacheVersion = 0;
-	outData->_gpuCacheUploadedVersion = 0;
-#endif
-
 			/***********************************/
 			/* GET NEW REFERENCES TO MATERIALS */
 			/***********************************/
@@ -1861,10 +1763,6 @@ MOVertexArrayObject	*vObj;
 		uvPtr[i].u += du;
 		uvPtr[i].v += dv;
 	}
-
-#ifdef __EMSCRIPTEN__
-	data->_gpuCacheVersion++;	// invalidate VBO cache so next draw re-uploads
-#endif
 }
 
 

@@ -169,28 +169,6 @@ if(EMSCRIPTEN)
 	#       The -sDISABLE_EXCEPTION_CATCHING=0 flag enables the JS-based exception
 	#       catching mechanism at link time, which IS compatible with ASYNCIFY
 	#       (unlike -fwasm-exceptions which is NOT compatible with ASYNCIFY).
-	# Core game functions exported for JavaScript
-	set(WASM_EXPORTED_CORE
-		_main
-		_OttoMatic_SetFenceCollisions
-		_OttoMatic_SetTerrainPath
-	)
-	# Performance profiling functions (callable from browser console)
-	set(WASM_EXPORTED_PERF
-		_OttoPerf_GetFPS
-		_OttoPerf_GetUpdateMs
-		_OttoPerf_GetTerrainMs
-		_OttoPerf_GetRenderMs
-		_OttoPerf_GetCacheHits
-		_OttoPerf_GetCacheMisses
-		_OttoPerf_GetCacheUpdates
-		_OttoPerf_GetDrawCalls
-		_OttoPerf_GetPolyCount
-		_OttoPerf_DumpStats
-	)
-	list(APPEND WASM_EXPORTED_CORE ${WASM_EXPORTED_PERF})
-	list(JOIN WASM_EXPORTED_CORE "','" WASM_EXPORTED_STR)
-
 	target_link_options(${GAME_TARGET} PRIVATE
 		"SHELL:-sASYNCIFY=1"
 		"SHELL:-sASYNCIFY_STACK_SIZE=65536"
@@ -201,7 +179,7 @@ if(EMSCRIPTEN)
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
 		"SHELL:-sINITIAL_MEMORY=268435456"
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
-		"SHELL:-sEXPORTED_FUNCTIONS=['${WASM_EXPORTED_STR}']"
+		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath']"
 		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']"
 		"SHELL:--shell-file ${CMAKE_SOURCE_DIR}/docs/shell.html"
 	)
