@@ -150,7 +150,22 @@ typedef struct
     float globalTransparency;
     float globalColorFilter[3];
 
+    // Dirty flags — each bit marks a group of uniforms that needs re-upload.
+    // This avoids redundant glUniform* calls across draw calls when only a
+    // subset of the state has actually changed.
+    uint32_t dirtyFlags;
+
 } ModernGLState;
+
+// Dirty flag bits for ModernGLState.dirtyFlags
+#define MODERNGL_DIRTY_MATRICES     (1u << 0)
+#define MODERNGL_DIRTY_LIGHTING     (1u << 1)
+#define MODERNGL_DIRTY_FOG          (1u << 2)
+#define MODERNGL_DIRTY_MATERIAL     (1u << 3)
+#define MODERNGL_DIRTY_TEXTURES     (1u << 4)
+#define MODERNGL_DIRTY_ALPHA        (1u << 5)
+#define MODERNGL_DIRTY_GLOBALS      (1u << 6)
+#define MODERNGL_DIRTY_ALL          0xFFFFFFFFu
 
 /****************************/
 /*    GLOBALS               */

@@ -76,6 +76,11 @@ static MatrixStack gProjectionStack;
 static MatrixStack gTextureStack;
 static MatrixStack* gCurrentStack = &gModelViewStack;
 static Boolean gMatrixStacksInitialized = false;
+// True when any matrix stack has been modified since the last
+// CompatGL_UpdateShaderState call. This avoids redundant 4×4 matrix
+// multiplications on every draw call when only the material or other
+// non-matrix state has changed.
+static Boolean gMatrixStacksDirty = true;
 
 static void EnsureMatrixStacksInitialized(void)
 {
@@ -168,7 +173,10 @@ void CompatGL_Enable(GLenum cap)
             int idx = cap - GL_LIGHT0;
             extern ModernGLState gModernGLState;
             if (idx >= 0 && idx < 4 && idx >= gModernGLState.numLights)
+            {
                 gModernGLState.numLights = idx + 1;
+                gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
+            }
             break;
         }
 
@@ -213,6 +221,7 @@ void CompatGL_Disable(GLenum cap)
             // Reset sphere map when texture generation is disabled
             extern ModernGLState gModernGLState;
             gModernGLState.useSphereMap = false;
+            gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
             break;
         }
 
@@ -262,6 +271,7 @@ void CompatGL_Fog(GLenum pname, GLfloat param)
             gModernGLState.fogDensity = param;
             break;
     }
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
 }
 
 void CompatGL_Fogfv(GLenum pname, const GLfloat* params)
@@ -273,6 +283,7 @@ void CompatGL_Fogfv(GLenum pname, const GLfloat* params)
         gModernGLState.fogColor[0] = params[0];
         gModernGLState.fogColor[1] = params[1];
         gModernGLState.fogColor[2] = params[2];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
     }
 }
 
@@ -288,6 +299,7 @@ void CompatGL_Fogi(GLenum pname, GLint param)
             case GL_EXP: gModernGLState.fogMode = 1; break;
             case GL_EXP2: gModernGLState.fogMode = 2; break;
         }
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
     }
 }
 
@@ -312,12 +324,14 @@ void CompatGL_Light(GLenum light, GLenum pname, const GLfloat* params)
             gModernGLState.lightDirection[lightIndex][1] /= len;
             gModernGLState.lightDirection[lightIndex][2] /= len;
         }
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
     else if (pname == GL_DIFFUSE)
     {
         gModernGLState.lightColor[lightIndex][0] = params[0];
         gModernGLState.lightColor[lightIndex][1] = params[1];
         gModernGLState.lightColor[lightIndex][2] = params[2];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
 }
 
@@ -330,6 +344,7 @@ void CompatGL_LightModelfv(GLenum pname, const GLfloat* params)
         gModernGLState.ambientLight[0] = params[0];
         gModernGLState.ambientLight[1] = params[1];
         gModernGLState.ambientLight[2] = params[2];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
 }
 
@@ -343,6 +358,7 @@ void CompatGL_Material(GLenum face, GLenum pname, const GLfloat* params)
         gModernGLState.materialColor[1] = params[1];
         gModernGLState.materialColor[2] = params[2];
         gModernGLState.materialColor[3] = params[3];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
     }
 }
 
@@ -363,11 +379,13 @@ void CompatGL_TexEnvi(GLenum target, GLenum pname, GLint param)
                 gModernGLState.multiTextureCombine = 1;
                 break;
         }
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
     }
     else if (pname == GL_COMBINE_RGB)
     {
         if (param == GL_ADD)
             gModernGLState.multiTextureCombine = 1;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
     }
 }
 
@@ -378,6 +396,7 @@ void CompatGL_TexGeni(GLenum coord, GLenum pname, GLint param)
     if (pname == GL_TEXTURE_GEN_MODE && param == GL_SPHERE_MAP)
     {
         gModernGLState.useSphereMap = true;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
     }
 }
 
@@ -415,6 +434,7 @@ void CompatGL_LoadMatrix(const GLfloat* m)
     if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
     {
         memcpy(gCurrentStack->matrices[gCurrentStack->depth], m, 16 * sizeof(float));
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -423,6 +443,7 @@ void CompatGL_LoadIdentity(void)
     if (gCurrentStack->depth < MATRIX_STACK_DEPTH)
     {
         Matrix4x4Identity(gCurrentStack->matrices[gCurrentStack->depth]);
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -433,6 +454,7 @@ void CompatGL_MultMatrix(const GLfloat* m)
         float result[16];
         Matrix4x4Multiply(gCurrentStack->matrices[gCurrentStack->depth], m, result);
         memcpy(gCurrentStack->matrices[gCurrentStack->depth], result, 16 * sizeof(float));
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -444,6 +466,7 @@ void CompatGL_PushMatrix(void)
                gCurrentStack->matrices[gCurrentStack->depth],
                16 * sizeof(float));
         gCurrentStack->depth++;
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -452,6 +475,7 @@ void CompatGL_PopMatrix(void)
     if (gCurrentStack->depth > 0)
     {
         gCurrentStack->depth--;
+        gMatrixStacksDirty = true;
     }
 }
 
@@ -542,34 +566,54 @@ void CompatGL_UpdateShaderState(void)
     extern float gGlobalTransparency;
     extern OGLColorRGB gGlobalColorFilter;
 
-    // Compute MVP matrix
-    float mvp[16];
-    Matrix4x4Multiply(gProjectionStack.matrices[gProjectionStack.depth],
-                      gModelViewStack.matrices[gModelViewStack.depth],
-                      mvp);
+    // Only recompute MVP, normal matrix, and texture matrix when the matrix
+    // stacks have actually changed.  This turns an O(draws) matrix multiply
+    // into O(matrix-changes), which is typically 1-2 per frame vs 200+.
+    if (gMatrixStacksDirty)
+    {
+        // Compute MVP matrix
+        float mvp[16];
+        Matrix4x4Multiply(gProjectionStack.matrices[gProjectionStack.depth],
+                          gModelViewStack.matrices[gModelViewStack.depth],
+                          mvp);
 
-    // Extract 3x3 normal matrix from model-view
-    float normalMatrix[9];
-    const float* mv = gModelViewStack.matrices[gModelViewStack.depth];
-    normalMatrix[0] = mv[0]; normalMatrix[1] = mv[1]; normalMatrix[2] = mv[2];
-    normalMatrix[3] = mv[4]; normalMatrix[4] = mv[5]; normalMatrix[5] = mv[6];
-    normalMatrix[6] = mv[8]; normalMatrix[7] = mv[9]; normalMatrix[8] = mv[10];
+        // Extract 3x3 normal matrix from model-view
+        float normalMatrix[9];
+        const float* mv = gModelViewStack.matrices[gModelViewStack.depth];
+        normalMatrix[0] = mv[0]; normalMatrix[1] = mv[1]; normalMatrix[2] = mv[2];
+        normalMatrix[3] = mv[4]; normalMatrix[4] = mv[5]; normalMatrix[5] = mv[6];
+        normalMatrix[6] = mv[8]; normalMatrix[7] = mv[9]; normalMatrix[8] = mv[10];
 
-    // Update matrices in shader state
-    ModernGL_SetMatrices(mvp, gModelViewStack.matrices[gModelViewStack.depth], normalMatrix);
+        // Update matrices in shader state
+        ModernGL_SetMatrices(mvp, gModelViewStack.matrices[gModelViewStack.depth], normalMatrix);
 
-    // Update texture matrix
-    ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
+        // Update texture matrix
+        ModernGL_SetTextureMatrix(gTextureStack.matrices[gTextureStack.depth]);
+
+        gMatrixStacksDirty = false;
+    }
 
     // Sync GL_TEXTURE_2D state to shader texture flags
-    gModernGLState.useTexture0 = gTexture2DEnabled[0];
-    gModernGLState.useTexture1 = gTexture2DEnabled[1];
+    if (gModernGLState.useTexture0 != gTexture2DEnabled[0]
+        || gModernGLState.useTexture1 != gTexture2DEnabled[1])
+    {
+        gModernGLState.useTexture0 = gTexture2DEnabled[0];
+        gModernGLState.useTexture1 = gTexture2DEnabled[1];
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
+    }
 
     // Sync game global transparency & color filter to shader state
-    gModernGLState.globalTransparency = gGlobalTransparency;
-    gModernGLState.globalColorFilter[0] = gGlobalColorFilter.r;
-    gModernGLState.globalColorFilter[1] = gGlobalColorFilter.g;
-    gModernGLState.globalColorFilter[2] = gGlobalColorFilter.b;
+    if (gModernGLState.globalTransparency != gGlobalTransparency
+        || gModernGLState.globalColorFilter[0] != gGlobalColorFilter.r
+        || gModernGLState.globalColorFilter[1] != gGlobalColorFilter.g
+        || gModernGLState.globalColorFilter[2] != gGlobalColorFilter.b)
+    {
+        gModernGLState.globalTransparency = gGlobalTransparency;
+        gModernGLState.globalColorFilter[0] = gGlobalColorFilter.r;
+        gModernGLState.globalColorFilter[1] = gGlobalColorFilter.g;
+        gModernGLState.globalColorFilter[2] = gGlobalColorFilter.b;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_GLOBALS;
+    }
 
     // Update fog state
     ModernGL_SetFog(gFogEnabled, gModernGLState.fogMode, gModernGLState.fogStart,
@@ -579,7 +623,7 @@ void CompatGL_UpdateShaderState(void)
     // Update alpha test
     ModernGL_SetAlphaTest(gAlphaTestEnabled, gAlphaFunc, gAlphaRef);
 
-    // Use shader and update all uniforms
+    // Use shader and update only dirty uniforms
     ModernGL_UseShader();
     ModernGL_UpdateUniforms();
 }

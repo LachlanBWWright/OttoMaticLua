@@ -7,6 +7,12 @@
 
 #include "game.h"
 #include <string.h>
+#include <GLES2/gl2.h>
+
+// #undef the macro so we can call the real glDrawElements for indexed drawing.
+// Our CompatGL_DrawElements implementation sets up the VBO + IBO and calls the
+// real function directly, bypassing the recursive macro redirect.
+#undef glDrawElements
 
 VertexArrayState gVertexArrayState;
 static int gCurrentClientTexture = 0; // 0 or 1 for GL_TEXTURE0 or GL_TEXTURE1
@@ -16,11 +22,11 @@ static int gCurrentClientTexture = 0; // 0 or 1 for GL_TEXTURE0 or GL_TEXTURE1
 // not on every call, to avoid constant glGenBuffers/glDeleteBuffers churn.
 static int gVertexArrayGeomCapacity = 0;
 
-// Persistent scratch geometry used as the destination for expanded index draws.
-// Reused across frames; only grows, never shrinks, to avoid per-draw-call
-// glGenBuffers / glDeleteBuffers which stall the GPU pipeline.
-static ModernGLGeometry* gExpandedScratch = NULL;
-static int gExpandedScratchCapacity = 0;
+// Persistent IBO (Index Buffer Object) for CompatGL_DrawElements.
+// Instead of expanding indexed vertices into a flat buffer, we upload
+// the index data to this IBO and use actual glDrawElements. This avoids
+// duplicating vertex data and lets the GPU vertex cache work properly.
+static GLuint gCompatIBO = 0;
 
 void CompatGL_EnableClientState(GLenum array)
 {
@@ -236,6 +242,7 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
     // Sync vertex color state to shader
     extern ModernGLState gModernGLState;
     gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
 
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
@@ -259,52 +266,56 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
             if ((GLuint)idx[i] > maxIdx) maxIdx = idx[i];
     }
 
-    // Convert source vertex arrays (maxIdx+1 vertices needed)
+    // Convert source vertex arrays (maxIdx+1 vertices needed) and upload VBO
     ConvertVertexArraysToVBO(maxIdx + 1);
+    ModernGLGeometry* geom = gVertexArrayState.geometry;
+    if (geom->needsUpload)
+        ModernGL_UploadGeometry(geom);
 
-    // Expand vertices based on indices into a persistent scratch geometry.
-    // Using a reusable geometry avoids per-draw-call glGenBuffers/glDeleteBuffers,
-    // which would otherwise stall the GPU pipeline on every draw call.
-    if (!gExpandedScratch || count > gExpandedScratchCapacity)
-    {
-        if (gExpandedScratch) ModernGL_FreeGeometry(gExpandedScratch);
-        gExpandedScratch = ModernGL_CreateGeometry(count, 0, true);
-        gExpandedScratchCapacity = count;
-    }
-    gExpandedScratch->numVertices = count;
-    gExpandedScratch->needsUpload = true;
+    // Ensure persistent IBO is large enough
+    if (!gCompatIBO)
+        glGenBuffers(1, &gCompatIBO);
 
-    ModernGLGeometry* src = gVertexArrayState.geometry;
-    ModernGLGeometry* expanded = gExpandedScratch;
+    // Upload index data to the persistent IBO
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gCompatIBO);
 
     if (type == GL_UNSIGNED_INT)
     {
-        const GLuint* idx = (const GLuint*)indices;
-        for (int i = 0; i < count; i++)
-        {
-            int srcIdx = idx[i];
-            memcpy(&expanded->positions[i * 3], &src->positions[srcIdx * 3], 3 * sizeof(GLfloat));
-            memcpy(&expanded->normals[i * 3], &src->normals[srcIdx * 3], 3 * sizeof(GLfloat));
-            memcpy(&expanded->colors[i * 4], &src->colors[srcIdx * 4], 4 * sizeof(GLfloat));
-            memcpy(&expanded->texCoords0[i * 2], &src->texCoords0[srcIdx * 2], 2 * sizeof(GLfloat));
-            memcpy(&expanded->texCoords1[i * 2], &src->texCoords1[srcIdx * 2], 2 * sizeof(GLfloat));
-        }
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), indices, GL_DYNAMIC_DRAW);
     }
     else
     {
-        const GLushort* idx = (const GLushort*)indices;
-        for (int i = 0; i < count; i++)
+        // Convert unsigned short to unsigned int for the IBO
+        static GLuint* sIdxBuf = NULL;
+        static int sIdxBufCap = 0;
+        if (count > sIdxBufCap)
         {
-            int srcIdx = idx[i];
-            memcpy(&expanded->positions[i * 3], &src->positions[srcIdx * 3], 3 * sizeof(GLfloat));
-            memcpy(&expanded->normals[i * 3], &src->normals[srcIdx * 3], 3 * sizeof(GLfloat));
-            memcpy(&expanded->colors[i * 4], &src->colors[srcIdx * 4], 4 * sizeof(GLfloat));
-            memcpy(&expanded->texCoords0[i * 2], &src->texCoords0[srcIdx * 2], 2 * sizeof(GLfloat));
-            memcpy(&expanded->texCoords1[i * 2], &src->texCoords1[srcIdx * 2], 2 * sizeof(GLfloat));
+            free(sIdxBuf);
+            sIdxBuf = (GLuint*)malloc(count * sizeof(GLuint));
+            sIdxBufCap = count;
         }
+        const GLushort* src = (const GLushort*)indices;
+        for (int i = 0; i < count; i++)
+            sIdxBuf[i] = (GLuint)src[i];
+
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), sIdxBuf, GL_DYNAMIC_DRAW);
     }
 
-    ModernGL_DrawGeometry(expanded, mode);
+    // Bind the VBO and set up vertex attribute pointers
+    glBindBuffer(GL_ARRAY_BUFFER, geom->vbo);
+    int stride = 14 * sizeof(GLfloat);
+    glVertexAttribPointer(ATTRIB_LOCATION_POSITION, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+    glVertexAttribPointer(ATTRIB_LOCATION_NORMAL, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(GLfloat)));
+    glVertexAttribPointer(ATTRIB_LOCATION_COLOR, 4, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(GLfloat)));
+    glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, stride, (void*)(10 * sizeof(GLfloat)));
+    glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(12 * sizeof(GLfloat)));
+
+    // Draw with actual index buffer — the GPU vertex cache can now reuse
+    // transformed vertices instead of processing duplicates.
+    glDrawElements(mode, count, GL_UNSIGNED_INT, 0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
@@ -312,6 +323,7 @@ void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
     // Sync vertex color state to shader
     extern ModernGLState gModernGLState;
     gModernGLState.useVertexColor = gVertexArrayState.colorArrayEnabled;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
 
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);

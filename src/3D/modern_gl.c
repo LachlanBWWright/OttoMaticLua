@@ -34,6 +34,12 @@ ImmediateModeBuffer gImmediateModeBuffer;
 static GLfloat* gUploadBuffer = NULL;
 static int gUploadBufferCapacity = 0; // capacity in floats
 
+// Persistent scratch geometry for immediate mode emulation.
+// Reused across draws; only grows, never shrinks, to avoid per-draw-call
+// glGenBuffers / glDeleteBuffers which stall the GPU pipeline.
+static ModernGLGeometry* gImmScratch = NULL;
+static int gImmScratchCapacity = 0;
+
 /****************************/
 /*    SHADER SOURCE         */
 /****************************/
@@ -277,6 +283,7 @@ void ModernGL_Init(void)
     gModernGLState.globalColorFilter[1] = 1.0f;
     gModernGLState.globalColorFilter[2] = 1.0f;
     gModernGLState.alphaRef = 0.0f;
+    gModernGLState.dirtyFlags = MODERNGL_DIRTY_ALL;
 
     // Initialize texture matrix to identity
     for (int i = 0; i < 16; i++)
@@ -301,6 +308,16 @@ void ModernGL_Init(void)
         printf("[ModernGL] ERROR: Failed to load shaders!\n");
     }
 
+    // Enable all vertex attribute arrays once — we use a single shader program
+    // with a fixed interleaved layout, so there is no reason to toggle these
+    // per draw call.  Removing the per-draw glEnableVertexAttribArray /
+    // glDisableVertexAttribArray saves 10 WebGL state changes per draw call.
+    glEnableVertexAttribArray(ATTRIB_LOCATION_POSITION);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_NORMAL);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_COLOR);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD0);
+    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD1);
+
     printf("[ModernGL] Initialization complete\n");
 }
 
@@ -317,6 +334,13 @@ void ModernGL_Shutdown(void)
         free(gImmediateModeBuffer.normals);
         free(gImmediateModeBuffer.colors);
         free(gImmediateModeBuffer.texCoords);
+    }
+
+    if (gImmScratch)
+    {
+        ModernGL_FreeGeometry(gImmScratch);
+        gImmScratch = NULL;
+        gImmScratchCapacity = 0;
     }
 }
 
@@ -409,36 +433,68 @@ void ModernGL_UseShader(void)
 
 void ModernGL_UpdateUniforms(void)
 {
-    // Upload all state to shader uniforms
-    glUniformMatrix4fv(gModernGLShader.uMVPMatrix, 1, GL_FALSE, gModernGLState.mvpMatrix);
-    glUniformMatrix4fv(gModernGLShader.uModelViewMatrix, 1, GL_FALSE, gModernGLState.modelViewMatrix);
-    glUniformMatrix3fv(gModernGLShader.uNormalMatrix, 1, GL_FALSE, gModernGLState.normalMatrix);
-    glUniform3fv(gModernGLShader.uAmbientLight, 1, gModernGLState.ambientLight);
-    glUniform3fv(gModernGLShader.uLightDirection, MAX_LIGHTS, (const GLfloat*)gModernGLState.lightDirection);
-    glUniform3fv(gModernGLShader.uLightColor, MAX_LIGHTS, (const GLfloat*)gModernGLState.lightColor);
-    glUniform1i(gModernGLShader.uNumLights, gModernGLState.numLights);
-    glUniform1i(gModernGLShader.uFogEnabled, gModernGLState.fogEnabled);
-    glUniform1f(gModernGLShader.uFogStart, gModernGLState.fogStart);
-    glUniform1f(gModernGLShader.uFogEnd, gModernGLState.fogEnd);
-    glUniform1f(gModernGLShader.uFogDensity, gModernGLState.fogDensity);
-    glUniform1i(gModernGLShader.uFogMode, gModernGLState.fogMode);
-    glUniform3fv(gModernGLShader.uFogColor, 1, gModernGLState.fogColor);
-    glUniform4fv(gModernGLShader.uMaterialColor, 1, gModernGLState.materialColor);
-    glUniform1i(gModernGLShader.uUseLighting, gModernGLState.useLighting);
-    glUniform1i(gModernGLShader.uUseVertexColor, gModernGLState.useVertexColor);
-    glUniform1i(gModernGLShader.uUseTexture0, gModernGLState.useTexture0);
-    glUniform1i(gModernGLShader.uUseTexture1, gModernGLState.useTexture1);
-    glUniformMatrix4fv(gModernGLShader.uTextureMatrix, 1, GL_FALSE, gModernGLState.textureMatrix);
-    glUniform1i(gModernGLShader.uTexture0, 0);
-    glUniform1i(gModernGLShader.uTexture1, 1);
-    glUniform1i(gModernGLShader.uMultiTextureMode, gModernGLState.multiTextureMode);
-    glUniform1i(gModernGLShader.uMultiTextureCombine, gModernGLState.multiTextureCombine);
-    glUniform1i(gModernGLShader.uUseSphereMap, gModernGLState.useSphereMap);
-    glUniform1i(gModernGLShader.uAlphaTestEnabled, gModernGLState.alphaTestEnabled);
-    glUniform1i(gModernGLShader.uAlphaFunc, gModernGLState.alphaFunc);
-    glUniform1f(gModernGLShader.uAlphaRef, gModernGLState.alphaRef);
-    glUniform1f(gModernGLShader.uGlobalTransparency, gModernGLState.globalTransparency);
-    glUniform3fv(gModernGLShader.uGlobalColorFilter, 1, gModernGLState.globalColorFilter);
+    uint32_t dirty = gModernGLState.dirtyFlags;
+    if (!dirty)
+        return;
+
+    if (dirty & MODERNGL_DIRTY_MATRICES)
+    {
+        glUniformMatrix4fv(gModernGLShader.uMVPMatrix, 1, GL_FALSE, gModernGLState.mvpMatrix);
+        glUniformMatrix4fv(gModernGLShader.uModelViewMatrix, 1, GL_FALSE, gModernGLState.modelViewMatrix);
+        glUniformMatrix3fv(gModernGLShader.uNormalMatrix, 1, GL_FALSE, gModernGLState.normalMatrix);
+        glUniformMatrix4fv(gModernGLShader.uTextureMatrix, 1, GL_FALSE, gModernGLState.textureMatrix);
+    }
+
+    if (dirty & MODERNGL_DIRTY_LIGHTING)
+    {
+        glUniform3fv(gModernGLShader.uAmbientLight, 1, gModernGLState.ambientLight);
+        glUniform3fv(gModernGLShader.uLightDirection, MAX_LIGHTS, (const GLfloat*)gModernGLState.lightDirection);
+        glUniform3fv(gModernGLShader.uLightColor, MAX_LIGHTS, (const GLfloat*)gModernGLState.lightColor);
+        glUniform1i(gModernGLShader.uNumLights, gModernGLState.numLights);
+        glUniform1i(gModernGLShader.uUseLighting, gModernGLState.useLighting);
+    }
+
+    if (dirty & MODERNGL_DIRTY_FOG)
+    {
+        glUniform1i(gModernGLShader.uFogEnabled, gModernGLState.fogEnabled);
+        glUniform1f(gModernGLShader.uFogStart, gModernGLState.fogStart);
+        glUniform1f(gModernGLShader.uFogEnd, gModernGLState.fogEnd);
+        glUniform1f(gModernGLShader.uFogDensity, gModernGLState.fogDensity);
+        glUniform1i(gModernGLShader.uFogMode, gModernGLState.fogMode);
+        glUniform3fv(gModernGLShader.uFogColor, 1, gModernGLState.fogColor);
+    }
+
+    if (dirty & MODERNGL_DIRTY_MATERIAL)
+    {
+        glUniform4fv(gModernGLShader.uMaterialColor, 1, gModernGLState.materialColor);
+        glUniform1i(gModernGLShader.uUseVertexColor, gModernGLState.useVertexColor);
+    }
+
+    if (dirty & MODERNGL_DIRTY_TEXTURES)
+    {
+        glUniform1i(gModernGLShader.uUseTexture0, gModernGLState.useTexture0);
+        glUniform1i(gModernGLShader.uUseTexture1, gModernGLState.useTexture1);
+        glUniform1i(gModernGLShader.uTexture0, 0);
+        glUniform1i(gModernGLShader.uTexture1, 1);
+        glUniform1i(gModernGLShader.uMultiTextureMode, gModernGLState.multiTextureMode);
+        glUniform1i(gModernGLShader.uMultiTextureCombine, gModernGLState.multiTextureCombine);
+        glUniform1i(gModernGLShader.uUseSphereMap, gModernGLState.useSphereMap);
+    }
+
+    if (dirty & MODERNGL_DIRTY_ALPHA)
+    {
+        glUniform1i(gModernGLShader.uAlphaTestEnabled, gModernGLState.alphaTestEnabled);
+        glUniform1i(gModernGLShader.uAlphaFunc, gModernGLState.alphaFunc);
+        glUniform1f(gModernGLShader.uAlphaRef, gModernGLState.alphaRef);
+    }
+
+    if (dirty & MODERNGL_DIRTY_GLOBALS)
+    {
+        glUniform1f(gModernGLShader.uGlobalTransparency, gModernGLState.globalTransparency);
+        glUniform3fv(gModernGLShader.uGlobalColorFilter, 1, gModernGLState.globalColorFilter);
+    }
+
+    gModernGLState.dirtyFlags = 0;
 }
 
 // Geometry management functions
@@ -543,13 +599,6 @@ void ModernGL_DrawGeometry(ModernGLGeometry* geom, GLenum mode)
     glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, stride, (void*)(10 * sizeof(GLfloat)));
     glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(12 * sizeof(GLfloat)));
 
-    // Enable vertex attributes
-    glEnableVertexAttribArray(ATTRIB_LOCATION_POSITION);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_NORMAL);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_COLOR);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD0);
-    glEnableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD1);
-
     // Draw
     if (geom->numIndices > 0)
     {
@@ -561,13 +610,6 @@ void ModernGL_DrawGeometry(ModernGLGeometry* geom, GLenum mode)
     {
         glDrawArrays(mode, 0, geom->numVertices);
     }
-
-    // Disable vertex attributes
-    glDisableVertexAttribArray(ATTRIB_LOCATION_POSITION);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_NORMAL);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_COLOR);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD0);
-    glDisableVertexAttribArray(ATTRIB_LOCATION_TEXCOORD1);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
@@ -597,11 +639,13 @@ void ModernGL_SetMaterial(float r, float g, float b, float a)
     gModernGLState.materialColor[1] = g;
     gModernGLState.materialColor[2] = b;
     gModernGLState.materialColor[3] = a;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
 }
 
 void ModernGL_SetLighting(Boolean enabled)
 {
     gModernGLState.useLighting = enabled;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
 }
 
 void ModernGL_SetAmbientLight(float r, float g, float b)
@@ -609,6 +653,7 @@ void ModernGL_SetAmbientLight(float r, float g, float b)
     gModernGLState.ambientLight[0] = r;
     gModernGLState.ambientLight[1] = g;
     gModernGLState.ambientLight[2] = b;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
 }
 
 void ModernGL_SetLight(int lightIndex, float dirX, float dirY, float dirZ, float r, float g, float b)
@@ -623,6 +668,7 @@ void ModernGL_SetLight(int lightIndex, float dirX, float dirY, float dirZ, float
         gModernGLState.lightColor[lightIndex][2] = b;
         if (lightIndex >= gModernGLState.numLights)
             gModernGLState.numLights = lightIndex + 1;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_LIGHTING;
     }
 }
 
@@ -636,6 +682,7 @@ void ModernGL_SetFog(Boolean enabled, int mode, float start, float end, float de
     gModernGLState.fogColor[0] = r;
     gModernGLState.fogColor[1] = g;
     gModernGLState.fogColor[2] = b;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
 }
 
 void ModernGL_SetAlphaTest(Boolean enabled, int func, float ref)
@@ -643,6 +690,7 @@ void ModernGL_SetAlphaTest(Boolean enabled, int func, float ref)
     gModernGLState.alphaTestEnabled = enabled;
     gModernGLState.alphaFunc = func;
     gModernGLState.alphaRef = ref;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_ALPHA;
 }
 
 void ModernGL_SetMatrices(const float* mvp, const float* modelView, const float* normal)
@@ -650,11 +698,13 @@ void ModernGL_SetMatrices(const float* mvp, const float* modelView, const float*
     memcpy(gModernGLState.mvpMatrix, mvp, 16 * sizeof(float));
     memcpy(gModernGLState.modelViewMatrix, modelView, 16 * sizeof(float));
     memcpy(gModernGLState.normalMatrix, normal, 9 * sizeof(float));
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATRICES;
 }
 
 void ModernGL_SetTextureMatrix(const float* texMatrix)
 {
     memcpy(gModernGLState.textureMatrix, texMatrix, 16 * sizeof(float));
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATRICES;
 }
 
 void ModernGL_SetTextures(Boolean tex0, Boolean tex1, Boolean sphereMap)
@@ -662,12 +712,30 @@ void ModernGL_SetTextures(Boolean tex0, Boolean tex1, Boolean sphereMap)
     gModernGLState.useTexture0 = tex0;
     gModernGLState.useTexture1 = tex1;
     gModernGLState.useSphereMap = sphereMap;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
 }
 
 void ModernGL_SetMultiTexture(int mode, int combine)
 {
     gModernGLState.multiTextureMode = mode;
     gModernGLState.multiTextureCombine = combine;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_TEXTURES;
+}
+
+// Helper: ensure the persistent immediate-mode scratch geometry can hold
+// at least 'needed' vertices. Only reallocates when the current capacity
+// is exceeded, so the common case is a simple pointer return.
+static ModernGLGeometry* EnsureImmScratch(int needed)
+{
+    if (!gImmScratch || needed > gImmScratchCapacity)
+    {
+        if (gImmScratch) ModernGL_FreeGeometry(gImmScratch);
+        gImmScratch = ModernGL_CreateGeometry(needed, 0, true);
+        gImmScratchCapacity = needed;
+    }
+    gImmScratch->numVertices = needed;
+    gImmScratch->needsUpload = true;
+    return gImmScratch;
 }
 
 // Immediate mode emulation
@@ -684,6 +752,7 @@ void ModernGL_EndImmediateMode(void)
 
     // Immediate mode always has per-vertex color baked in
     gModernGLState.useVertexColor = true;
+    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_MATERIAL;
 
     // Update shader state before drawing
     extern void CompatGL_UpdateShaderState(void);
@@ -700,8 +769,7 @@ void ModernGL_EndImmediateMode(void)
         numVertices = numQuads * 6;
         drawMode = GL_TRIANGLES;
 
-        // Create temporary geometry with expanded vertices
-        ModernGLGeometry* geom = ModernGL_CreateGeometry(numVertices, 0, true);
+        ModernGLGeometry* geom = EnsureImmScratch(numVertices);
 
         // Convert quads to triangles: 0,1,2,3 -> 0,1,2, 0,2,3
         for (int q = 0; q < numQuads; q++)
@@ -736,7 +804,6 @@ void ModernGL_EndImmediateMode(void)
         }
 
         ModernGL_DrawGeometry(geom, drawMode);
-        ModernGL_FreeGeometry(geom);
     }
     // Convert GL_LINE_LOOP to GL_LINE_STRIP (add first vertex at end)
     else if (gImmediateModeBuffer.mode == GL_LINE_LOOP)
@@ -744,7 +811,7 @@ void ModernGL_EndImmediateMode(void)
         numVertices = gImmediateModeBuffer.vertexCount + 1;
         drawMode = GL_LINE_STRIP;
 
-        ModernGLGeometry* geom = ModernGL_CreateGeometry(numVertices, 0, true);
+        ModernGLGeometry* geom = EnsureImmScratch(numVertices);
 
         // Copy all vertices
         memcpy(geom->positions, gImmediateModeBuffer.positions, gImmediateModeBuffer.vertexCount * 3 * sizeof(GLfloat));
@@ -762,12 +829,11 @@ void ModernGL_EndImmediateMode(void)
         memcpy(&geom->texCoords1[lastIdx * 2], &gImmediateModeBuffer.texCoords[0], 2 * sizeof(GLfloat));
 
         ModernGL_DrawGeometry(geom, drawMode);
-        ModernGL_FreeGeometry(geom);
     }
     // Other modes (GL_TRIANGLES, GL_LINES, GL_LINE_STRIP, etc.) work as-is
     else
     {
-        ModernGLGeometry* geom = ModernGL_CreateGeometry(numVertices, 0, true);
+        ModernGLGeometry* geom = EnsureImmScratch(numVertices);
 
         memcpy(geom->positions, gImmediateModeBuffer.positions, numVertices * 3 * sizeof(GLfloat));
         memcpy(geom->normals, gImmediateModeBuffer.normals, numVertices * 3 * sizeof(GLfloat));
@@ -776,7 +842,6 @@ void ModernGL_EndImmediateMode(void)
         memcpy(geom->texCoords1, gImmediateModeBuffer.texCoords, numVertices * 2 * sizeof(GLfloat));
 
         ModernGL_DrawGeometry(geom, drawMode);
-        ModernGL_FreeGeometry(geom);
     }
 }
 
