@@ -11,65 +11,6 @@
 
 #include "game.h"
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-
-/****************************/
-/*    PROFILING API         */
-/****************************/
-//
-// Exposes performance metrics to JavaScript for profiling.
-// Usage from browser console:
-//   Module._OttoPerf_GetFPS()
-//   Module._OttoPerf_GetUpdateMs()
-//   Module._OttoPerf_GetTerrainMs()
-//   Module._OttoPerf_GetRenderMs()
-//   Module._OttoPerf_GetCacheHits()
-//   Module._OttoPerf_GetCacheMisses()
-//   Module._OttoPerf_GetCacheUpdates()
-//   Module._OttoPerf_GetDrawCalls()
-//   Module._OttoPerf_DumpStats()
-//
-
-EMSCRIPTEN_KEEPALIVE float OttoPerf_GetFPS(void)           { return gFramesPerSecond; }
-EMSCRIPTEN_KEEPALIVE float OttoPerf_GetUpdateMs(void)      { return gLoopUpdateTimeMs; }
-EMSCRIPTEN_KEEPALIVE float OttoPerf_GetTerrainMs(void)     { return gLoopTerrainTimeMs; }
-EMSCRIPTEN_KEEPALIVE float OttoPerf_GetRenderMs(void)      { return gLoopRenderTimeMs; }
-EMSCRIPTEN_KEEPALIVE int   OttoPerf_GetCacheHits(void)     { return (int)gVBOCacheHits; }
-EMSCRIPTEN_KEEPALIVE int   OttoPerf_GetCacheMisses(void)   { return (int)gVBOCacheMisses; }
-EMSCRIPTEN_KEEPALIVE int   OttoPerf_GetCacheUpdates(void)  { return (int)gVBOCacheUpdates; }
-EMSCRIPTEN_KEEPALIVE int   OttoPerf_GetDrawCalls(void)     { return (int)gDrawCallsThisFrame; }
-EMSCRIPTEN_KEEPALIVE int   OttoPerf_GetPolyCount(void)     { return gPolysThisFrame; }
-
-EMSCRIPTEN_KEEPALIVE void OttoPerf_DumpStats(void)
-{
-    EM_ASM({
-        var fps  = Module._OttoPerf_GetFPS();
-        var upd  = Module._OttoPerf_GetUpdateMs();
-        var ter  = Module._OttoPerf_GetTerrainMs();
-        var ren  = Module._OttoPerf_GetRenderMs();
-        var hits = Module._OttoPerf_GetCacheHits();
-        var miss = Module._OttoPerf_GetCacheMisses();
-        var upds = Module._OttoPerf_GetCacheUpdates();
-        var draw = Module._OttoPerf_GetDrawCalls();
-        var poly = Module._OttoPerf_GetPolyCount();
-        console.log(
-            '%c=== Otto Matic Performance ===', 'color: #0af; font-weight: bold',
-            '\nFPS:         ' + fps.toFixed(1),
-            '\nFrame:       ' + (fps > 0 ? (1000/fps).toFixed(2) : '?') + 'ms',
-            '\nUpdate:      ' + upd.toFixed(2) + 'ms',
-            '\nTerrain:     ' + ter.toFixed(2) + 'ms',
-            '\nRender:      ' + ren.toFixed(2) + 'ms',
-            '\nDraw calls:  ' + draw,
-            '\nPolygons:    ' + poly,
-            '\nVBO cache:   ' + hits + ' hits, ' + miss + ' misses, ' + upds + ' updates',
-            '\nCache rate:  ' + (draw > 0 ? ((hits/draw)*100).toFixed(1) : '0') + '% cached'
-        );
-    });
-}
-
-#endif // __EMSCRIPTEN__
-
 /****************************/
 /*    PROTOTYPES            */
 /****************************/
@@ -366,14 +307,6 @@ static void PlayArea(void)
 			uint64_t t1 = SDL_GetPerformanceCounter();
 			gLoopRenderTimeMs = (t1 - t0) / sPerfFreqMs;
 		}
-
-#ifdef __EMSCRIPTEN__
-		// Reset per-frame profiling counters
-		gVBOCacheHits = 0;
-		gVBOCacheMisses = 0;
-		gVBOCacheUpdates = 0;
-		gDrawCallsThisFrame = 0;
-#endif
 
 
 

@@ -94,12 +94,6 @@ int		i;
 	gSmokeColumnMesh.colorsByte		= nil;
 	gSmokeColumnMesh.colorsFloat	= gSmokeColumnColors;
 
-#ifdef __EMSCRIPTEN__
-	gSmokeColumnMesh._gpuGeometryCache		= nil;
-	gSmokeColumnMesh._gpuCacheVersion		= 0;
-	gSmokeColumnMesh._gpuCacheUploadedVersion = 0;
-#endif
-
 
 
 	MOMaterialData matData;
@@ -561,9 +555,6 @@ float	size,dist;
 
 	glEnable(GL_CULL_FACE);
 	MO_DrawMaterial(gColorStreakMaterial);		// activate material
-#ifdef __EMSCRIPTEN__
-	gSmokeColumnMesh._gpuCacheVersion++;		// dynamic data changes every draw
-#endif
 	MO_DrawGeometry_VertexArray(&gSmokeColumnMesh);
 
 	OGL_PopState();
@@ -691,9 +682,6 @@ float			fps = gFramesPerSecondFrac;
 	OGL_PushState();
 
 	MO_DrawMaterial(gSpriteGroupList[SPRITE_GROUP_PARTICLES][PARTICLE_SObjType_GreySmoke].materialObject);		// activate material
-#ifdef __EMSCRIPTEN__
-	gSmokeColumnMesh._gpuCacheVersion++;		// dynamic data changes every draw
-#endif
 	MO_DrawGeometry_VertexArray(&gSmokeColumnMesh);
 
 	OGL_PopState();
