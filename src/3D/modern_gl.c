@@ -674,23 +674,40 @@ void ModernGL_SetLight(int lightIndex, float dirX, float dirY, float dirZ, float
 
 void ModernGL_SetFog(Boolean enabled, int mode, float start, float end, float density, float r, float g, float b)
 {
-    gModernGLState.fogEnabled = enabled;
-    gModernGLState.fogMode = mode;
-    gModernGLState.fogStart = start;
-    gModernGLState.fogEnd = end;
-    gModernGLState.fogDensity = density;
-    gModernGLState.fogColor[0] = r;
-    gModernGLState.fogColor[1] = g;
-    gModernGLState.fogColor[2] = b;
-    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
+    // Only mark dirty if a value actually changed — avoids redundant
+    // glUniform* calls when fog state is re-synced every draw call.
+    if (gModernGLState.fogEnabled != enabled
+        || gModernGLState.fogMode != mode
+        || gModernGLState.fogStart != start
+        || gModernGLState.fogEnd != end
+        || gModernGLState.fogDensity != density
+        || gModernGLState.fogColor[0] != r
+        || gModernGLState.fogColor[1] != g
+        || gModernGLState.fogColor[2] != b)
+    {
+        gModernGLState.fogEnabled = enabled;
+        gModernGLState.fogMode = mode;
+        gModernGLState.fogStart = start;
+        gModernGLState.fogEnd = end;
+        gModernGLState.fogDensity = density;
+        gModernGLState.fogColor[0] = r;
+        gModernGLState.fogColor[1] = g;
+        gModernGLState.fogColor[2] = b;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_FOG;
+    }
 }
 
 void ModernGL_SetAlphaTest(Boolean enabled, int func, float ref)
 {
-    gModernGLState.alphaTestEnabled = enabled;
-    gModernGLState.alphaFunc = func;
-    gModernGLState.alphaRef = ref;
-    gModernGLState.dirtyFlags |= MODERNGL_DIRTY_ALPHA;
+    if (gModernGLState.alphaTestEnabled != enabled
+        || gModernGLState.alphaFunc != func
+        || gModernGLState.alphaRef != ref)
+    {
+        gModernGLState.alphaTestEnabled = enabled;
+        gModernGLState.alphaFunc = func;
+        gModernGLState.alphaRef = ref;
+        gModernGLState.dirtyFlags |= MODERNGL_DIRTY_ALPHA;
+    }
 }
 
 void ModernGL_SetMatrices(const float* mvp, const float* modelView, const float* normal)
