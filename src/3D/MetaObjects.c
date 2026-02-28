@@ -942,9 +942,17 @@ go_here:
 
 		ModernGLGeometry *cache = (ModernGLGeometry *)mutableData->_gpuGeometryCache;
 
+		// Check if geometry size changed (particles resize every frame)
+		if (cache && (cache->numVertices != data->numPoints || cache->numIndices != data->numTriangles * 3))
+		{
+			ModernGL_FreeGeometry(cache);
+			cache = nil;
+			mutableData->_gpuGeometryCache = nil;
+		}
+
 		if (!cache)
 		{
-			// First draw: create the VBO cache
+			// First draw or size changed: create the VBO cache
 			cache = ModernGL_CreateVBOCacheFromVertexArray(
 				data->numPoints, data->numTriangles,
 				data->points, data->normals, data->uvs[0],
