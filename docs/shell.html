@@ -627,6 +627,28 @@
       } catch (e) { /* ignore */ }
       if (btn) btn.textContent = _muted ? '🔇 Muted' : '🔊 Unmute';
     }
+
+    // ── Performance Profiling API ─────────────────────────────────
+    // Usage from browser console:
+    //   ottoperf()            - dump one snapshot
+    //   ottoperfStart(2000)   - auto-dump every 2 seconds
+    //   ottoperfStop()        - stop auto-dump
+    //
+    var _perfInterval = null;
+    window.ottoperf = function() {
+      try { Module._OttoPerf_DumpStats(); } catch(e) { console.warn('Game not ready:', e); }
+    };
+    window.ottoperfStart = function(intervalMs) {
+      if (_perfInterval) clearInterval(_perfInterval);
+      _perfInterval = setInterval(function() {
+        try { Module._OttoPerf_DumpStats(); } catch(e) {}
+      }, intervalMs || 2000);
+      console.log('Performance logging started (every ' + (intervalMs || 2000) + 'ms). Call ottoperfStop() to stop.');
+    };
+    window.ottoperfStop = function() {
+      if (_perfInterval) { clearInterval(_perfInterval); _perfInterval = null; }
+      console.log('Performance logging stopped.');
+    };
   </script>
 
   {{{ SCRIPT }}}

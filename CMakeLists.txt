@@ -179,7 +179,7 @@ if(EMSCRIPTEN)
 		"SHELL:-sALLOW_MEMORY_GROWTH=1"
 		"SHELL:-sINITIAL_MEMORY=268435456"
 		"SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Data@/Data"
-		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath']"
+		"SHELL:-sEXPORTED_FUNCTIONS=['_main','_OttoMatic_SetFenceCollisions','_OttoMatic_SetTerrainPath','_OttoPerf_GetFPS','_OttoPerf_GetUpdateMs','_OttoPerf_GetTerrainMs','_OttoPerf_GetRenderMs','_OttoPerf_GetCacheHits','_OttoPerf_GetCacheMisses','_OttoPerf_GetCacheUpdates','_OttoPerf_GetDrawCalls','_OttoPerf_GetPolyCount','_OttoPerf_DumpStats']"
 		"SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']"
 		"SHELL:--shell-file ${CMAKE_SOURCE_DIR}/docs/shell.html"
 	)

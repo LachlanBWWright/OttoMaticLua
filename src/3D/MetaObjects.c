@@ -54,6 +54,13 @@ uint32_t			gGlobalMaterialFlags = 0;
 
 MOMaterialObject	*gMostRecentMaterial;
 
+#ifdef __EMSCRIPTEN__
+uint32_t			gVBOCacheHits = 0;
+uint32_t			gVBOCacheMisses = 0;
+uint32_t			gVBOCacheUpdates = 0;
+uint32_t			gDrawCallsThisFrame = 0;
+#endif
+
 
 /***************** INIT META OBJECT HANDLER ******************/
 
@@ -945,6 +952,7 @@ go_here:
 				data->triangles, hasVertexColor);
 			mutableData->_gpuGeometryCache = cache;
 			mutableData->_gpuCacheUploadedVersion = mutableData->_gpuCacheVersion;
+			gVBOCacheMisses++;
 		}
 		else if (mutableData->_gpuCacheVersion != mutableData->_gpuCacheUploadedVersion)
 		{
@@ -954,7 +962,14 @@ go_here:
 				data->uvs[0], data->colorsByte, data->colorsFloat,
 				hasVertexColor);
 			mutableData->_gpuCacheUploadedVersion = mutableData->_gpuCacheVersion;
+			gVBOCacheUpdates++;
 		}
+		else
+		{
+			gVBOCacheHits++;
+		}
+
+		gDrawCallsThisFrame++;
 
 		// Draw using cached VBO/IBO (calls the real glDrawElements, not the compat wrapper)
 		ModernGL_DrawCachedVBO(cache);
