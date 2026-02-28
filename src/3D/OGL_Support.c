@@ -677,6 +677,9 @@ do_anaglyph:
 			"terrain:\t%.2fms\n"
 			"render:\t\t%.2fms\n"
 			"tris:\t\t%d\n"
+			"draws:\t\t%d\n"
+			"verts:\t\t%d\n"
+			"uploads:\t%d\n"
 			"\n"
 			"input x:\t%.3f\n"
 			"input y:\t%.3f\n"
@@ -714,6 +717,9 @@ do_anaglyph:
 			gLoopTerrainTimeMs,
 			gLoopRenderTimeMs,
 			gPolysThisFrame,
+			gDrawCallsThisFrame,
+			gVerticesThisFrame,
+			gBufferUploadsThisFrame,
 			gPlayerInfo.analogControlX,
 			gPlayerInfo.analogControlZ,
 			(180/PI) * ( atan2f(gPlayerInfo.analogControlZ,gPlayerInfo.analogControlX) ),
@@ -1509,30 +1515,16 @@ OGLLightDefType	*lights;
 GLenum _OGL_CheckError(const char* file, const int line)
 {
 #ifdef __EMSCRIPTEN__
-	// On Emscripten, drain all GL errors. Return 0 so callers'
-	// "if (OGL_CheckError()) DoFatalAlert()" patterns don't crash the game.
-	// Log more verbosely to help diagnose rendering issues.
-	static int sErrorCount = 0;
-	GLenum error;
-	while ((error = glGetError()) != GL_NO_ERROR)
-	{
-		sErrorCount++;
-		if (sErrorCount <= 50 || (sErrorCount % 500) == 0)
-		{
-			const char* errorName = "UNKNOWN";
-			switch (error) {
-				case 0x0500: errorName = "GL_INVALID_ENUM"; break;
-				case 0x0501: errorName = "GL_INVALID_VALUE"; break;
-				case 0x0502: errorName = "GL_INVALID_OPERATION"; break;
-				case 0x0505: errorName = "GL_OUT_OF_MEMORY"; break;
-				case 0x0506: errorName = "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
-			}
-			static char buf[512];
-			SDL_snprintf(buf, 512, "GL Error 0x%x (%s) [total=%d] at %s:%d",
-			             error, errorName, sErrorCount, file, line);
-			SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "%s", buf);
-		}
-	}
+	// On WASM/WebGL, skip glGetError() entirely.  Each glGetError() call
+	// crosses the WASM→JS boundary and forces the GL command queue to flush,
+	// stalling the GPU pipeline.  With ~7 calls per draw and ~200 draws per
+	// frame, this added >1400 synchronous round-trips per frame.
+	//
+	// Return GL_NO_ERROR so callers' "if (OGL_CheckError()) DoFatalAlert()"
+	// patterns are satisfied.  Any real GL errors will still be visible in
+	// the browser's WebGL error log (DevTools → Console).
+	(void)file;
+	(void)line;
 	return GL_NO_ERROR;
 #else
 	GLenum error = glGetError();

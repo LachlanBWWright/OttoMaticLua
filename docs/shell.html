@@ -383,7 +383,9 @@
       // Without this, browsers may default to the integrated GPU, causing poor
       // frame rates even though the CPU is not the bottleneck.
       webglContextAttributes: {
-        powerPreference: 'high-performance'
+        powerPreference: 'high-performance',
+        antialias: false,
+        preserveDrawingBuffer: false
       },
 
       // Pass level/terrain as C argc/argv when provided via URL params
