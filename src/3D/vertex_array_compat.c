@@ -2,31 +2,91 @@
 // vertex_array_compat.c
 // Client-side vertex array compatibility implementation for WebGL
 //
+// Performance-critical path: the game issues ~200+ draw calls per frame.
+// Each call must upload vertex data from CPU arrays to GPU buffers.
+//
+// Optimization strategy (non-interleaved direct upload):
+//   Instead of copying client arrays into intermediate buffers and then
+//   interleaving them into a single VBO (6 data passes per draw call),
+//   we upload each attribute array directly to its own VBO (1 pass each).
+//   For float arrays with stride==0, this is a single glBufferData with
+//   the client pointer — zero CPU-side copying.  For GL_UNSIGNED_BYTE
+//   colors, WebGL's normalized attribute support (GL_TRUE) lets the GPU
+//   do the 0–255 → 0.0–1.0 conversion, also eliminating CPU work.
+//
 
 #ifdef __EMSCRIPTEN__
 
 #include "game.h"
 #include <string.h>
+#include <stdlib.h>
 #include <GLES2/gl2.h>
 
-// #undef the macro so we can call the real glDrawElements for indexed drawing.
-// Our CompatGL_DrawElements implementation sets up the VBO + IBO and calls the
-// real function directly, bypassing the recursive macro redirect.
+// #undef the macros so we can call the real GL functions for drawing.
+// Our CompatGL_* implementations set up VBOs and call the real functions
+// directly, bypassing the recursive macro redirect.
 #undef glDrawElements
+#undef glDrawArrays
 
 VertexArrayState gVertexArrayState;
 static int gCurrentClientTexture = 0; // 0 or 1 for GL_TEXTURE0 or GL_TEXTURE1
 
-// Capacity tracker for gVertexArrayState.geometry.
-// We only reallocate when the vertex count exceeds the current capacity,
-// not on every call, to avoid constant glGenBuffers/glDeleteBuffers churn.
-static int gVertexArrayGeomCapacity = 0;
+// ── Persistent GPU buffers ──────────────────────────────────────────────
+// One VBO per vertex attribute (non-interleaved layout).
+// Created on first use, never deleted — avoids per-draw-call
+// glGenBuffers/glDeleteBuffers which stall the GPU pipeline.
+static GLuint sAttrVBO[5] = {0};  // pos, norm, color, tc0, tc1
+static GLuint sIndexIBO = 0;
 
-// Persistent IBO (Index Buffer Object) for CompatGL_DrawElements.
-// Instead of expanding indexed vertices into a flat buffer, we upload
-// the index data to this IBO and use actual glDrawElements. This avoids
-// duplicating vertex data and lets the GPU vertex cache work properly.
-static GLuint gCompatIBO = 0;
+// Bitmask tracking which vertex attribute arrays are currently enabled
+// on the GL side.  We only toggle when the set changes between draws.
+static uint8_t sEnabledAttribMask = 0x1F;  // all 5 enabled by ModernGL_Init
+
+// Persistent scratch buffer for ushort→uint index conversion
+static GLuint* sIdxConvertBuf = NULL;
+static int sIdxConvertBufCap = 0;
+
+// ── Attribute enable/disable helpers ────────────────────────────────────
+
+// Ensure exactly the attributes in 'needed' (bitmask) are enabled.
+// Disabled attributes get a per-vertex constant via glVertexAttrib*.
+static void SyncAttribEnables(uint8_t needed)
+{
+    uint8_t diff = sEnabledAttribMask ^ needed;
+    if (!diff) return;  // fast-path: nothing changed
+
+    for (int i = 0; i < 5; i++)
+    {
+        if (!(diff & (1u << i))) continue;
+
+        if (needed & (1u << i))
+        {
+            glEnableVertexAttribArray(i);
+        }
+        else
+        {
+            glDisableVertexAttribArray(i);
+            // Set per-vertex constant for the disabled attribute
+            switch (i)
+            {
+                case ATTRIB_LOCATION_NORMAL:   glVertexAttrib3f(i, 0.0f, 1.0f, 0.0f); break;
+                case ATTRIB_LOCATION_COLOR:    glVertexAttrib4f(i, 1.0f, 1.0f, 1.0f, 1.0f); break;
+                case ATTRIB_LOCATION_TEXCOORD0:
+                case ATTRIB_LOCATION_TEXCOORD1: glVertexAttrib2f(i, 0.0f, 0.0f); break;
+                default: break;
+            }
+        }
+    }
+    sEnabledAttribMask = needed;
+}
+
+// Restore all 5 attributes to enabled state.  Called after non-interleaved
+// draws so that the interleaved path (ModernGL_DrawGeometry, used for
+// immediate-mode emulation) still works without its own enable tracking.
+static void RestoreAllAttribs(void)
+{
+    SyncAttribEnables(0x1F);
+}
 
 void CompatGL_EnableClientState(GLenum array)
 {
@@ -114,129 +174,6 @@ void CompatGL_ClientActiveTexture(GLenum texture)
         gCurrentClientTexture = 1;
 }
 
-static void ConvertVertexArraysToVBO(int vertexCount)
-{
-    // Only reallocate when the required count exceeds the current capacity.
-    // Avoiding glGenBuffers/glDeleteBuffers on every draw call is the single
-    // biggest GPU-pipeline performance win: constant reallocation causes the
-    // driver to stall while it waits for in-flight GPU work to complete.
-    if (!gVertexArrayState.geometry || vertexCount > gVertexArrayGeomCapacity)
-    {
-        if (gVertexArrayState.geometry)
-            ModernGL_FreeGeometry(gVertexArrayState.geometry);
-
-        gVertexArrayState.geometry = ModernGL_CreateGeometry(vertexCount, 0, true);
-        gVertexArrayGeomCapacity = vertexCount;
-    }
-    gVertexArrayState.geometry->numVertices = vertexCount;
-
-    ModernGLGeometry* geom = gVertexArrayState.geometry;
-
-    // Convert vertex positions
-    if (gVertexArrayState.vertexArrayEnabled && gVertexArrayState.vertexPointer)
-    {
-        const GLfloat* src = (const GLfloat*)gVertexArrayState.vertexPointer;
-        for (int i = 0; i < vertexCount; i++)
-        {
-            const GLfloat* vertex = &src[i * 3]; // Assuming 3 components
-            geom->positions[i * 3 + 0] = vertex[0];
-            geom->positions[i * 3 + 1] = vertex[1];
-            geom->positions[i * 3 + 2] = vertex[2];
-        }
-    }
-
-    // Convert normals
-    if (gVertexArrayState.normalArrayEnabled && gVertexArrayState.normalPointer)
-    {
-        const GLfloat* src = (const GLfloat*)gVertexArrayState.normalPointer;
-        for (int i = 0; i < vertexCount; i++)
-        {
-            const GLfloat* normal = &src[i * 3];
-            geom->normals[i * 3 + 0] = normal[0];
-            geom->normals[i * 3 + 1] = normal[1];
-            geom->normals[i * 3 + 2] = normal[2];
-        }
-    }
-    else
-    {
-        // Default normals (pointing up)
-        for (int i = 0; i < vertexCount; i++)
-        {
-            geom->normals[i * 3 + 0] = 0.0f;
-            geom->normals[i * 3 + 1] = 1.0f;
-            geom->normals[i * 3 + 2] = 0.0f;
-        }
-    }
-
-    // Convert colors
-    if (gVertexArrayState.colorArrayEnabled && gVertexArrayState.colorPointer)
-    {
-        if (gVertexArrayState.colorType == GL_FLOAT)
-        {
-            const GLfloat* src = (const GLfloat*)gVertexArrayState.colorPointer;
-            for (int i = 0; i < vertexCount; i++)
-            {
-                const GLfloat* color = &src[i * 4];
-                geom->colors[i * 4 + 0] = color[0];
-                geom->colors[i * 4 + 1] = color[1];
-                geom->colors[i * 4 + 2] = color[2];
-                geom->colors[i * 4 + 3] = color[3];
-            }
-        }
-        else if (gVertexArrayState.colorType == GL_UNSIGNED_BYTE)
-        {
-            const GLubyte* src = (const GLubyte*)gVertexArrayState.colorPointer;
-            for (int i = 0; i < vertexCount; i++)
-            {
-                const GLubyte* color = &src[i * 4];
-                geom->colors[i * 4 + 0] = color[0] / 255.0f;
-                geom->colors[i * 4 + 1] = color[1] / 255.0f;
-                geom->colors[i * 4 + 2] = color[2] / 255.0f;
-                geom->colors[i * 4 + 3] = color[3] / 255.0f;
-            }
-        }
-    }
-    else
-    {
-        // Default color (white)
-        for (int i = 0; i < vertexCount; i++)
-        {
-            geom->colors[i * 4 + 0] = 1.0f;
-            geom->colors[i * 4 + 1] = 1.0f;
-            geom->colors[i * 4 + 2] = 1.0f;
-            geom->colors[i * 4 + 3] = 1.0f;
-        }
-    }
-
-    // Convert texture coordinates
-    for (int texUnit = 0; texUnit < 2; texUnit++)
-    {
-        GLfloat* dst = (texUnit == 0) ? geom->texCoords0 : geom->texCoords1;
-
-        if (gVertexArrayState.texCoordArrayEnabled[texUnit] && gVertexArrayState.texCoordPointers[texUnit])
-        {
-            const GLfloat* src = (const GLfloat*)gVertexArrayState.texCoordPointers[texUnit];
-            for (int i = 0; i < vertexCount; i++)
-            {
-                const GLfloat* texCoord = &src[i * 2];
-                dst[i * 2 + 0] = texCoord[0];
-                dst[i * 2 + 1] = texCoord[1];
-            }
-        }
-        else
-        {
-            // Default tex coords (0,0)
-            for (int i = 0; i < vertexCount; i++)
-            {
-                dst[i * 2 + 0] = 0.0f;
-                dst[i * 2 + 1] = 0.0f;
-            }
-        }
-    }
-
-    geom->needsUpload = true;
-}
-
 void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
     // Sync vertex color state to shader
@@ -251,71 +188,148 @@ void CompatGL_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* 
     if (type != GL_UNSIGNED_INT && type != GL_UNSIGNED_SHORT)
         return; // Unsupported index type
 
-    // Find the maximum index to know how many source vertices to convert
+    // ── Find maximum index to determine vertex count ──────────────────
+    // This scan is still needed because glVertexPointer/glNormalPointer
+    // do not receive a count parameter.  The loop is ~0.01ms for typical
+    // index counts (~600) which is a small fraction of the total savings.
     GLuint maxIdx = 0;
     if (type == GL_UNSIGNED_INT)
     {
         const GLuint* idx = (const GLuint*)indices;
-        for (int i = 0; i < count; i++)
+        for (GLsizei i = 0; i < count; i++)
             if (idx[i] > maxIdx) maxIdx = idx[i];
     }
     else
     {
         const GLushort* idx = (const GLushort*)indices;
-        for (int i = 0; i < count; i++)
+        for (GLsizei i = 0; i < count; i++)
             if ((GLuint)idx[i] > maxIdx) maxIdx = idx[i];
     }
 
-    // Convert source vertex arrays (maxIdx+1 vertices needed) and upload VBO
-    ConvertVertexArraysToVBO(maxIdx + 1);
-    ModernGLGeometry* geom = gVertexArrayState.geometry;
-    if (geom->needsUpload)
-        ModernGL_UploadGeometry(geom);
+    int vertexCount = (int)maxIdx + 1;
 
-    // Ensure persistent IBO is large enough
-    if (!gCompatIBO)
-        glGenBuffers(1, &gCompatIBO);
+    // ── Create persistent VBOs on first use ──────────────────────────
+    if (!sAttrVBO[0])
+    {
+        glGenBuffers(5, sAttrVBO);
+        glGenBuffers(1, &sIndexIBO);
+    }
 
-    // Upload index data to the persistent IBO
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gCompatIBO);
+    // ── Determine which attributes are provided ──────────────────────
+    Boolean hasPos   = gVertexArrayState.vertexArrayEnabled && gVertexArrayState.vertexPointer;
+    Boolean hasNorm  = gVertexArrayState.normalArrayEnabled && gVertexArrayState.normalPointer;
+    Boolean hasColor = gVertexArrayState.colorArrayEnabled  && gVertexArrayState.colorPointer;
+    Boolean hasTC0   = gVertexArrayState.texCoordArrayEnabled[0] && gVertexArrayState.texCoordPointers[0];
+    Boolean hasTC1   = gVertexArrayState.texCoordArrayEnabled[1] && gVertexArrayState.texCoordPointers[1];
 
+    uint8_t attribMask = (1u << ATTRIB_LOCATION_POSITION);  // always need position
+    if (hasNorm)  attribMask |= (1u << ATTRIB_LOCATION_NORMAL);
+    if (hasColor) attribMask |= (1u << ATTRIB_LOCATION_COLOR);
+    if (hasTC0)   attribMask |= (1u << ATTRIB_LOCATION_TEXCOORD0);
+    if (hasTC1)   attribMask |= (1u << ATTRIB_LOCATION_TEXCOORD1);
+
+    SyncAttribEnables(attribMask);
+
+    int uploads = 0;
+
+    // ── POSITIONS: direct upload from client array (zero CPU copy) ───
+    if (hasPos)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[0]);
+        glBufferData(GL_ARRAY_BUFFER, vertexCount * 3 * (GLsizeiptr)sizeof(GLfloat),
+                     gVertexArrayState.vertexPointer, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_POSITION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
+    }
+
+    // ── NORMALS: direct upload from client array (zero CPU copy) ─────
+    if (hasNorm)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[1]);
+        glBufferData(GL_ARRAY_BUFFER, vertexCount * 3 * (GLsizeiptr)sizeof(GLfloat),
+                     gVertexArrayState.normalPointer, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
+    }
+
+    // ── COLORS: direct upload; GPU handles byte→float normalization ──
+    if (hasColor)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[2]);
+        if (gVertexArrayState.colorType == GL_FLOAT)
+        {
+            glBufferData(GL_ARRAY_BUFFER, vertexCount * 4 * (GLsizeiptr)sizeof(GLfloat),
+                         gVertexArrayState.colorPointer, GL_DYNAMIC_DRAW);
+            glVertexAttribPointer(ATTRIB_LOCATION_COLOR, 4, GL_FLOAT, GL_FALSE, 0, 0);
+        }
+        else if (gVertexArrayState.colorType == GL_UNSIGNED_BYTE)
+        {
+            // GL_TRUE = normalized: GPU converts 0–255 to 0.0–1.0
+            glBufferData(GL_ARRAY_BUFFER, vertexCount * 4 * (GLsizeiptr)sizeof(GLubyte),
+                         gVertexArrayState.colorPointer, GL_DYNAMIC_DRAW);
+            glVertexAttribPointer(ATTRIB_LOCATION_COLOR, 4, GL_UNSIGNED_BYTE, GL_TRUE, 0, 0);
+        }
+        uploads++;
+    }
+
+    // ── TEXCOORD0: direct upload (zero CPU copy) ─────────────────────
+    if (hasTC0)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[3]);
+        glBufferData(GL_ARRAY_BUFFER, vertexCount * 2 * (GLsizeiptr)sizeof(GLfloat),
+                     gVertexArrayState.texCoordPointers[0], GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
+    }
+
+    // ── TEXCOORD1: direct upload (zero CPU copy) ─────────────────────
+    if (hasTC1)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[4]);
+        glBufferData(GL_ARRAY_BUFFER, vertexCount * 2 * (GLsizeiptr)sizeof(GLfloat),
+                     gVertexArrayState.texCoordPointers[1], GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
+    }
+
+    // ── INDEX BUFFER ─────────────────────────────────────────────────
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sIndexIBO);
     if (type == GL_UNSIGNED_INT)
     {
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), indices, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * (GLsizeiptr)sizeof(GLuint),
+                     indices, GL_DYNAMIC_DRAW);
     }
     else
     {
-        // Convert unsigned short to unsigned int for the IBO
-        static GLuint* sIdxBuf = NULL;
-        static int sIdxBufCap = 0;
-        if (count > sIdxBufCap)
+        // Convert ushort indices to uint (required for OES_element_index_uint)
+        if (count > sIdxConvertBufCap)
         {
-            free(sIdxBuf);
-            sIdxBuf = (GLuint*)malloc(count * sizeof(GLuint));
-            sIdxBufCap = count;
+            free(sIdxConvertBuf);
+            sIdxConvertBuf = (GLuint*)malloc(count * sizeof(GLuint));
+            sIdxConvertBufCap = count;
         }
         const GLushort* src = (const GLushort*)indices;
-        for (int i = 0; i < count; i++)
-            sIdxBuf[i] = (GLuint)src[i];
+        for (GLsizei i = 0; i < count; i++)
+            sIdxConvertBuf[i] = (GLuint)src[i];
 
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(GLuint), sIdxBuf, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * (GLsizeiptr)sizeof(GLuint),
+                     sIdxConvertBuf, GL_DYNAMIC_DRAW);
     }
+    uploads++;
 
-    // Bind the VBO and set up vertex attribute pointers
-    glBindBuffer(GL_ARRAY_BUFFER, geom->vbo);
-    int stride = 14 * sizeof(GLfloat);
-    glVertexAttribPointer(ATTRIB_LOCATION_POSITION, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
-    glVertexAttribPointer(ATTRIB_LOCATION_NORMAL, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(GLfloat)));
-    glVertexAttribPointer(ATTRIB_LOCATION_COLOR, 4, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(GLfloat)));
-    glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, stride, (void*)(10 * sizeof(GLfloat)));
-    glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(12 * sizeof(GLfloat)));
-
-    // Draw with actual index buffer — the GPU vertex cache can now reuse
-    // transformed vertices instead of processing duplicates.
+    // ── DRAW ─────────────────────────────────────────────────────────
     glDrawElements(mode, count, GL_UNSIGNED_INT, 0);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // Restore all attribs for the interleaved path (immediate mode)
+    RestoreAllAttribs();
+
+    // ── Profiling counters ───────────────────────────────────────────
+    gDrawCallsThisFrame++;
+    gVerticesThisFrame += vertexCount;
+    gBufferUploadsThisFrame += uploads;
 }
 
 void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
@@ -329,99 +343,107 @@ void CompatGL_DrawArrays(GLenum mode, GLint first, GLsizei count)
     extern void CompatGL_UpdateShaderState(void);
     CompatGL_UpdateShaderState();
 
-    // Convert only the vertices in [first, first+count) directly into
-    // gVertexArrayState.geometry with 'count' entries, then draw from it.
-    // This avoids the old approach of converting first+count vertices and
-    // then making a second, per-draw-call subset copy (which created and
-    // destroyed a VBO on every single draw call).
-
-    // Only reallocate when we need more capacity (don't recreate on every frame)
-    if (!gVertexArrayState.geometry || count > gVertexArrayGeomCapacity)
+    // ── Create persistent VBOs on first use ──────────────────────────
+    if (!sAttrVBO[0])
     {
-        if (gVertexArrayState.geometry)
-            ModernGL_FreeGeometry(gVertexArrayState.geometry);
-
-        gVertexArrayState.geometry = ModernGL_CreateGeometry(count, 0, true);
-        gVertexArrayGeomCapacity = count;
+        glGenBuffers(5, sAttrVBO);
+        glGenBuffers(1, &sIndexIBO);
     }
-    gVertexArrayState.geometry->numVertices = count;
 
-    ModernGLGeometry* geom = gVertexArrayState.geometry;
+    // ── Determine which attributes are provided ──────────────────────
+    Boolean hasPos   = gVertexArrayState.vertexArrayEnabled && gVertexArrayState.vertexPointer;
+    Boolean hasNorm  = gVertexArrayState.normalArrayEnabled && gVertexArrayState.normalPointer;
+    Boolean hasColor = gVertexArrayState.colorArrayEnabled  && gVertexArrayState.colorPointer;
+    Boolean hasTC0   = gVertexArrayState.texCoordArrayEnabled[0] && gVertexArrayState.texCoordPointers[0];
+    Boolean hasTC1   = gVertexArrayState.texCoordArrayEnabled[1] && gVertexArrayState.texCoordPointers[1];
 
-    // Convert vertex positions from the [first, first+count) range
-    if (gVertexArrayState.vertexArrayEnabled && gVertexArrayState.vertexPointer)
+    uint8_t attribMask = (1u << ATTRIB_LOCATION_POSITION);
+    if (hasNorm)  attribMask |= (1u << ATTRIB_LOCATION_NORMAL);
+    if (hasColor) attribMask |= (1u << ATTRIB_LOCATION_COLOR);
+    if (hasTC0)   attribMask |= (1u << ATTRIB_LOCATION_TEXCOORD0);
+    if (hasTC1)   attribMask |= (1u << ATTRIB_LOCATION_TEXCOORD1);
+
+    SyncAttribEnables(attribMask);
+
+    int uploads = 0;
+
+    // ── POSITIONS: direct upload with offset ─────────────────────────
+    if (hasPos)
     {
         const GLfloat* src = (const GLfloat*)gVertexArrayState.vertexPointer + first * 3;
-        memcpy(geom->positions, src, count * 3 * sizeof(GLfloat));
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[0]);
+        glBufferData(GL_ARRAY_BUFFER, count * 3 * (GLsizeiptr)sizeof(GLfloat),
+                     src, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_POSITION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
     }
 
-    // Convert normals from the [first, first+count) range
-    if (gVertexArrayState.normalArrayEnabled && gVertexArrayState.normalPointer)
+    // ── NORMALS ──────────────────────────────────────────────────────
+    if (hasNorm)
     {
         const GLfloat* src = (const GLfloat*)gVertexArrayState.normalPointer + first * 3;
-        memcpy(geom->normals, src, count * 3 * sizeof(GLfloat));
-    }
-    else
-    {
-        // Default normals (pointing up)
-        for (int i = 0; i < count; i++)
-        {
-            geom->normals[i * 3 + 0] = 0.0f;
-            geom->normals[i * 3 + 1] = 1.0f;
-            geom->normals[i * 3 + 2] = 0.0f;
-        }
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[1]);
+        glBufferData(GL_ARRAY_BUFFER, count * 3 * (GLsizeiptr)sizeof(GLfloat),
+                     src, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
     }
 
-    // Convert colors from the [first, first+count) range
-    if (gVertexArrayState.colorArrayEnabled && gVertexArrayState.colorPointer)
+    // ── COLORS ───────────────────────────────────────────────────────
+    if (hasColor)
     {
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[2]);
         if (gVertexArrayState.colorType == GL_FLOAT)
         {
             const GLfloat* src = (const GLfloat*)gVertexArrayState.colorPointer + first * 4;
-            memcpy(geom->colors, src, count * 4 * sizeof(GLfloat));
+            glBufferData(GL_ARRAY_BUFFER, count * 4 * (GLsizeiptr)sizeof(GLfloat),
+                         src, GL_DYNAMIC_DRAW);
+            glVertexAttribPointer(ATTRIB_LOCATION_COLOR, 4, GL_FLOAT, GL_FALSE, 0, 0);
         }
         else if (gVertexArrayState.colorType == GL_UNSIGNED_BYTE)
         {
             const GLubyte* src = (const GLubyte*)gVertexArrayState.colorPointer + first * 4;
-            for (int i = 0; i < count; i++)
-            {
-                geom->colors[i * 4 + 0] = src[i * 4 + 0] / 255.0f;
-                geom->colors[i * 4 + 1] = src[i * 4 + 1] / 255.0f;
-                geom->colors[i * 4 + 2] = src[i * 4 + 2] / 255.0f;
-                geom->colors[i * 4 + 3] = src[i * 4 + 3] / 255.0f;
-            }
+            glBufferData(GL_ARRAY_BUFFER, count * 4 * (GLsizeiptr)sizeof(GLubyte),
+                         src, GL_DYNAMIC_DRAW);
+            glVertexAttribPointer(ATTRIB_LOCATION_COLOR, 4, GL_UNSIGNED_BYTE, GL_TRUE, 0, 0);
         }
+        uploads++;
     }
-    else
+
+    // ── TEXCOORD0 ────────────────────────────────────────────────────
+    if (hasTC0)
     {
-        // Default color (white)
-        for (int i = 0; i < count; i++)
-        {
-            geom->colors[i * 4 + 0] = 1.0f;
-            geom->colors[i * 4 + 1] = 1.0f;
-            geom->colors[i * 4 + 2] = 1.0f;
-            geom->colors[i * 4 + 3] = 1.0f;
-        }
+        const GLfloat* src = (const GLfloat*)gVertexArrayState.texCoordPointers[0] + first * 2;
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[3]);
+        glBufferData(GL_ARRAY_BUFFER, count * 2 * (GLsizeiptr)sizeof(GLfloat),
+                     src, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
     }
 
-    // Convert texture coordinates from the [first, first+count) range
-    for (int texUnit = 0; texUnit < 2; texUnit++)
+    // ── TEXCOORD1 ────────────────────────────────────────────────────
+    if (hasTC1)
     {
-        GLfloat* dst = (texUnit == 0) ? geom->texCoords0 : geom->texCoords1;
-
-        if (gVertexArrayState.texCoordArrayEnabled[texUnit] && gVertexArrayState.texCoordPointers[texUnit])
-        {
-            const GLfloat* src = (const GLfloat*)gVertexArrayState.texCoordPointers[texUnit] + first * 2;
-            memcpy(dst, src, count * 2 * sizeof(GLfloat));
-        }
-        else
-        {
-            memset(dst, 0, count * 2 * sizeof(GLfloat));
-        }
+        const GLfloat* src = (const GLfloat*)gVertexArrayState.texCoordPointers[1] + first * 2;
+        glBindBuffer(GL_ARRAY_BUFFER, sAttrVBO[4]);
+        glBufferData(GL_ARRAY_BUFFER, count * 2 * (GLsizeiptr)sizeof(GLfloat),
+                     src, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(ATTRIB_LOCATION_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        uploads++;
     }
 
-    geom->needsUpload = true;
-    ModernGL_DrawGeometry(geom, mode);
+    // ── DRAW (no index buffer) ───────────────────────────────────────
+    glDrawArrays(mode, 0, count);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // Restore all attribs for the interleaved path (immediate mode)
+    RestoreAllAttribs();
+
+    // ── Profiling counters ───────────────────────────────────────────
+    gDrawCallsThisFrame++;
+    gVerticesThisFrame += count;
+    gBufferUploadsThisFrame += uploads;
 }
 
 #endif // __EMSCRIPTEN__

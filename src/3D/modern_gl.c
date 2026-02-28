@@ -843,6 +843,11 @@ void ModernGL_EndImmediateMode(void)
 
         ModernGL_DrawGeometry(geom, drawMode);
     }
+
+    // Profiling counters
+    gDrawCallsThisFrame++;
+    gVerticesThisFrame += numVertices;
+    gBufferUploadsThisFrame++;
 }
 
 void ModernGL_ImmediateColor(float r, float g, float b, float a)

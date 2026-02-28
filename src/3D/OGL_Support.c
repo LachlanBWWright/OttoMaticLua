@@ -677,6 +677,9 @@ do_anaglyph:
 			"terrain:\t%.2fms\n"
 			"render:\t\t%.2fms\n"
 			"tris:\t\t%d\n"
+			"draws:\t\t%d\n"
+			"verts:\t\t%d\n"
+			"uploads:\t%d\n"
 			"\n"
 			"input x:\t%.3f\n"
 			"input y:\t%.3f\n"
@@ -714,6 +717,9 @@ do_anaglyph:
 			gLoopTerrainTimeMs,
 			gLoopRenderTimeMs,
 			gPolysThisFrame,
+			gDrawCallsThisFrame,
+			gVerticesThisFrame,
+			gBufferUploadsThisFrame,
 			gPlayerInfo.analogControlX,
 			gPlayerInfo.analogControlZ,
 			(180/PI) * ( atan2f(gPlayerInfo.analogControlZ,gPlayerInfo.analogControlX) ),

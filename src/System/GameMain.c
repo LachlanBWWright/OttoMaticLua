@@ -77,6 +77,10 @@ float				gLoopUpdateTimeMs = 0;
 float				gLoopTerrainTimeMs = 0;
 float				gLoopRenderTimeMs = 0;
 
+int					gDrawCallsThisFrame = 0;
+int					gVerticesThisFrame = 0;
+int					gBufferUploadsThisFrame = 0;
+
 Boolean				gPlayingFromSavedGame = false;
 Boolean				gGameOver = false;
 Boolean				gLevelCompleted = false;
@@ -277,6 +281,10 @@ static void PlayArea(void)
 
 		GAME_YIELD_BROWSER();			// yield to browser event loop (requires ASYNCIFY)
 
+		gDrawCallsThisFrame = 0;		// reset per-frame profiling counters
+		gVerticesThisFrame = 0;
+		gBufferUploadsThisFrame = 0;
+
 		UpdateInput();									// read local keys
 
 				/* MOVE OBJECTS */
@@ -307,6 +315,24 @@ static void PlayArea(void)
 			uint64_t t1 = SDL_GetPerformanceCounter();
 			gLoopRenderTimeMs = (t1 - t0) / sPerfFreqMs;
 		}
+
+#ifdef __EMSCRIPTEN__
+		/* Log frame timings to browser console every 120 frames (~2s at 60fps).
+		 * This lets users profile performance via the browser DevTools console
+		 * without needing to toggle the in-game debug HUD.  The log includes
+		 * per-phase timings and draw-call / vertex / buffer-upload counts. */
+		if ((gGameFrameNum & 0x7F) == 0)		// every 128 frames
+		{
+			emscripten_log(EM_LOG_CONSOLE,
+				"[perf] fps=%d  frame=%.1fms  update=%.1fms  terrain=%.1fms  render=%.1fms  "
+				"draws=%d  verts=%d  uploads=%d  tris=%d",
+				(int)(gFramesPerSecond + .5f),
+				(gFramesPerSecond > 0.0f ? 1000.0f / gFramesPerSecond : 0.0f),
+				gLoopUpdateTimeMs, gLoopTerrainTimeMs, gLoopRenderTimeMs,
+				gDrawCallsThisFrame, gVerticesThisFrame, gBufferUploadsThisFrame,
+				gPolysThisFrame);
+		}
+#endif
 
 
 
