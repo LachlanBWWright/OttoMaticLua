@@ -412,6 +412,12 @@ int	u,v,i,j;
 		meshPtr->colorsFloat	= nil;
 		meshPtr->triangles 		= triPtr;
 
+#ifdef __EMSCRIPTEN__
+		meshPtr->_gpuGeometryCache = nil;
+		meshPtr->_gpuCacheVersion = 0;
+		meshPtr->_gpuCacheUploadedVersion = 0;
+#endif
+
 
 				/* SET UV & COLOR VALUES */
 
@@ -444,6 +450,22 @@ int	u,v,i,j;
 
 void DisposeSuperTileMemoryList(void)
 {
+
+#ifdef __EMSCRIPTEN__
+			/* FREE ALL SUPERTILE GPU CACHES */
+
+	if (gSuperTileMeshData)
+	{
+		for (int i = 0; i < MAX_SUPERTILES; i++)
+		{
+			if (gSuperTileMeshData[i]._gpuGeometryCache)
+			{
+				ModernGL_FreeGeometry((ModernGLGeometry *)gSuperTileMeshData[i]._gpuGeometryCache);
+				gSuperTileMeshData[i]._gpuGeometryCache = nil;
+			}
+		}
+	}
+#endif
 
 			/* NUKE ALL MASTER ARRAYS WHICH WILL FREE UP ALL SUPERTILE MEMORY */
 
@@ -685,6 +707,10 @@ OGLVector3D			*vertexNormals = nil;
 			/******************************/
 
 	CalculateSupertileVertexNormals(meshData, startRow, startCol);
+
+#ifdef __EMSCRIPTEN__
+	meshData->_gpuCacheVersion++;	// invalidate VBO cache when supertile is (re)built
+#endif
 
 
 	if (vertexColorList)
@@ -1201,6 +1227,10 @@ float	oneOverWaveLength,r,rw,dampenRatio;
 			/*************************/
 
 	CalculateSupertileVertexNormals(superTile->meshData, startRow, startCol);
+
+#ifdef __EMSCRIPTEN__
+	superTile->meshData->_gpuCacheVersion++;	// invalidate VBO cache after deformation
+#endif
 
 
 }

@@ -92,6 +92,17 @@ void DisposeFences(void)
 {
 int		i;
 
+#ifdef __EMSCRIPTEN__
+	for (i = 0; i < gNumFences; i++)
+	{
+		if (gFenceTriMeshData[i]._gpuGeometryCache)
+		{
+			ModernGL_FreeGeometry((ModernGLGeometry *)gFenceTriMeshData[i]._gpuGeometryCache);
+			gFenceTriMeshData[i]._gpuGeometryCache = nil;
+		}
+	}
+#endif
+
 	if (!gFenceList)
 		return;
 
@@ -272,6 +283,12 @@ float					minX,minY,minZ,maxX,maxY,maxZ;
 		gFenceTriMeshData[f].colorsFloat				= nil;
 		gFenceTriMeshData[f].numPoints					= numNubs * 2;					// 2 vertices per nub
 		gFenceTriMeshData[f].numTriangles				= (numNubs-1) * 2;			// 2 faces per nub (minus 1st)
+
+#ifdef __EMSCRIPTEN__
+		gFenceTriMeshData[f]._gpuGeometryCache			= nil;
+		gFenceTriMeshData[f]._gpuCacheVersion			= 0;
+		gFenceTriMeshData[f]._gpuCacheUploadedVersion	= 0;
+#endif
 
 
 				/* BUILD TRIANGLE INFO */

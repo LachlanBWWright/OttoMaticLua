@@ -85,6 +85,17 @@ static const OGLTextureCoord	gWaterScrollUVDeltas[NUM_WATER_TYPES][2] =
 void DisposeWater(void)
 {
 
+#ifdef __EMSCRIPTEN__
+	for (int i = 0; i < gNumWaterPatches; i++)
+	{
+		if (gWaterTriMeshData[i]._gpuGeometryCache)
+		{
+			ModernGL_FreeGeometry((ModernGLGeometry *)gWaterTriMeshData[i]._gpuGeometryCache);
+			gWaterTriMeshData[i]._gpuGeometryCache = nil;
+		}
+	}
+#endif
+
 	if (!gWaterListHandle)
 		return;
 
@@ -225,6 +236,12 @@ static void MakeWaterGeometry(void)
 		gWaterTriMeshData[f].colorsFloat				= nil;
 		gWaterTriMeshData[f].numPoints 					= numNubs+1;					// +1 is to include the extra center point
 		gWaterTriMeshData[f].numTriangles 				= numNubs;
+
+#ifdef __EMSCRIPTEN__
+		gWaterTriMeshData[f]._gpuGeometryCache			= nil;
+		gWaterTriMeshData[f]._gpuCacheVersion			= 0;
+		gWaterTriMeshData[f]._gpuCacheUploadedVersion	= 0;
+#endif
 
 
 				/* BUILD TRIANGLE INFO */
@@ -368,6 +385,10 @@ float	ud1, uv1, ud2, uv2;
 			gWaterUVs2[f][i].u 	-= ud2;
 			gWaterUVs2[f][i].v 	-= uv2;
 		}
+
+#ifdef __EMSCRIPTEN__
+		gWaterTriMeshData[f]._gpuCacheVersion++;	// invalidate VBO cache after UV animation
+#endif
 
 	}
 

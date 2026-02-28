@@ -138,6 +138,11 @@ typedef struct
 	OGLColorRGBA_Byte	*colorsByte;						// ptr to array of vertex colors (byte & float versions)
 	OGLColorRGBA		*colorsFloat;
 	MOTriangleIndecies	*triangles;						// ptr to array of triangle triad indecies
+#ifdef __EMSCRIPTEN__
+	void				*_gpuGeometryCache;				// cached VBO/IBO (ModernGLGeometry*) for fast reuse
+	uint32_t			_gpuCacheVersion;				// incremented when CPU-side data changes
+	uint32_t			_gpuCacheUploadedVersion;		// version that was last uploaded to GPU
+#endif
 }MOVertexArrayData;
 		
 typedef struct
