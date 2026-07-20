@@ -1,6 +1,10 @@
 #pragma once
 
-#include <SDL3/SDL_opengl.h>
+#include "graphics_api.h"
+
+#if !defined(__NDS__) && !defined(OTTO_DS_HOMEBREW)
+	#include <SDL3/SDL_opengl.h>
+#endif
 
 extern PFNGLACTIVETEXTUREARBPROC			procptr_glActiveTextureARB;
 extern PFNGLCLIENTACTIVETEXTUREARBPROC		procptr_glClientActiveTextureARB;
