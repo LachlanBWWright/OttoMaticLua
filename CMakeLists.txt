@@ -21,6 +21,7 @@ project(${GAME_TARGET}
 
 option(BUILD_SDL_FROM_SOURCE "Build SDL from source" OFF)
 option(SDL_STATIC "Static link SDL" OFF)
+option(OTTO_DS_HOMEBREW "Build the renderer against the Nintendo DS homebrew backend" OFF)
 
 option(SANITIZE "Build with asan/ubsan" OFF)
 
@@ -95,7 +96,9 @@ endif()
 
 add_subdirectory(extern/Pomme)
 
-find_package(OpenGL REQUIRED)
+if(NOT OTTO_DS_HOMEBREW)
+	find_package(OpenGL REQUIRED)
+endif()
 
 #------------------------------------------------------------------------------
 # EXECUTABLE TARGET
@@ -210,7 +213,12 @@ else()
 endif()
 
 # Link core dependencies
-target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+if(OTTO_DS_HOMEBREW)
+	target_compile_definitions(${GAME_TARGET} PRIVATE OTTO_DS_HOMEBREW=1)
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme)
+else()
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
+endif()
 
 # Add required frameworks for KillMacMouseAcceleration
 if(APPLE)

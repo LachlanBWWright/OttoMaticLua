@@ -346,7 +346,7 @@ static void OGL_InitDrawContext(OGLViewDefType* viewDefPtr)
 				/* SET VARIOUS STATE INFO */
 
 
-	glEnable(GL_DEPTH_TEST);								// use z-buffer
+	GraphicsApi_SetEnable(GraphicsApiFeature_DepthTest, true); // use z-buffer
 
 	{
 		GLfloat	color[] = {1,1,1,1};									// set global material color to white
@@ -354,20 +354,20 @@ static void OGL_InitDrawContext(OGLViewDefType* viewDefPtr)
 	}
 
 	glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
-	glEnable(GL_COLOR_MATERIAL);
+	GraphicsApi_SetEnable(GraphicsApiFeature_ColorMaterial, true);
 
-  	glEnable(GL_NORMALIZE);
+  	GraphicsApi_SetEnable(GraphicsApiFeature_Normalize, true);
 
 
 
 				/* CLEAR BACK BUFFER ENTIRELY */
 
-	glClearColor(0,0,0, 1.0);
+	GraphicsApi_SetClearColor(0,0,0, 1.0);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-	glClear(GL_COLOR_BUFFER_BIT);
+	GraphicsApi_Clear(GL_COLOR_BUFFER_BIT);
 	SDL_GL_SwapWindow(gSDLWindow);
-	glClear(GL_COLOR_BUFFER_BIT);
-	glClearColor(viewDefPtr->clearColor.r, viewDefPtr->clearColor.g, viewDefPtr->clearColor.b, 1.0);
+	GraphicsApi_Clear(GL_COLOR_BUFFER_BIT);
+	GraphicsApi_SetClearColor(viewDefPtr->clearColor.r, viewDefPtr->clearColor.g, viewDefPtr->clearColor.b, 1.0);
 
 }
 
@@ -380,16 +380,16 @@ static void OGL_SetStyles(OGLSetupInputType *setupDefPtr)
 OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 
-	glEnable(GL_CULL_FACE);									// activate culling
+	GraphicsApi_SetEnable(GraphicsApiFeature_CullFace, true); // activate culling
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);									// CCW is front face
 
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);		// set default blend func
-	glDisable(GL_BLEND);									// but turn it off by default
+	GraphicsApi_SetBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // set default blend func
+	GraphicsApi_SetEnable(GraphicsApiFeature_Blend, false); // but turn it off by default
 
 //	glHint(GL_TRANSFORM_HINT_APPLE, GL_FASTEST);	// srcport rm
 
-	glDisable(GL_RESCALE_NORMAL);
+	GraphicsApi_SetEnable(GraphicsApiFeature_RescaleNormal, false);
 
     glHint(GL_FOG_HINT, GL_NICEST);		// pixel accurate fog?
 
@@ -397,7 +397,7 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 			/* ENABLE ALPHA CHANNELS */
 
-	glEnable(GL_ALPHA_TEST);
+	GraphicsApi_SetEnable(GraphicsApiFeature_AlphaTest, true);
 	glAlphaFunc(GL_NOTEQUAL, 0);	// draw any pixel who's Alpha != 0
 
 
@@ -412,10 +412,10 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 		glFogf(GL_FOG_START, styleDefPtr->fogStart);
 		glFogf(GL_FOG_END, styleDefPtr->fogEnd);
 		glFogfv(GL_FOG_COLOR, &setupDefPtr->view.clearColor.r);
-		glEnable(GL_FOG);
+		GraphicsApi_SetEnable(GraphicsApiFeature_Fog, true);
 	}
 	else
-		glDisable(GL_FOG);
+		GraphicsApi_SetEnable(GraphicsApiFeature_Fog, false);
 
 	OGL_CheckError();
 }
@@ -552,10 +552,10 @@ void OGL_DrawScene(void (*drawRoutine)(void))
 			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);		// make sure clearing Red/Green/Blue channels
 		else if (gGamePrefs.anaglyphMode == ANAGLYPH_MONO)
 			glColorMask(GL_TRUE, GL_FALSE, GL_TRUE, GL_TRUE);		// make sure clearing Red/Blue channels
-		glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+		GraphicsApi_Clear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 	}
 	else
-		glClear(GL_DEPTH_BUFFER_BIT);
+		GraphicsApi_Clear(GL_DEPTH_BUFFER_BIT);
 
 
 			/*************************/
@@ -595,7 +595,7 @@ do_anaglyph:
 	{
 		int x, y, w, h;
 		OGL_GetCurrentViewport(&x, &y, &w, &h);
-		glViewport(x, y, w, h);
+		GraphicsApi_SetViewport(x, y, w, h);
 		gCurrentAspectRatio = (float) w / (float) (h == 0? 1: h);
 
 		// Compute logical width & height for 2D elements

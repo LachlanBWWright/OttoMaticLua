@@ -23,10 +23,14 @@ extern "C"
 		/* HEADERS */
 
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_opengl.h>
-#include <SDL3/SDL_opengl_glext.h>
+
+#if !defined(OTTO_DS_HOMEBREW) && !defined(__NDS__)
+	#include <SDL3/SDL_opengl.h>
+	#include <SDL3/SDL_opengl_glext.h>
+#endif
 
 #include "Pomme.h"
+#include "graphics_api.h"
 
 #include "version.h"
 #include "pool.h"

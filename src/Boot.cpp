@@ -80,6 +80,7 @@ static void Boot(int argc, char** argv)
 
 	// Start our "machine"
 	Pomme::Init();
+	GraphicsApi_Initialize();
 
 	// Find path to game data folder
 	const char* executablePath = argc > 0 ? argv[0] : NULL;
@@ -142,6 +143,7 @@ static void Shutdown()
 	// Always restore the user's mouse acceleration before exiting.
 	SetMacLinearMouse(false);
 
+	GraphicsApi_Shutdown();
 	Pomme::Shutdown();
 
 	if (gSDLWindow)
