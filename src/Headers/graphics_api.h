@@ -16,7 +16,6 @@ typedef unsigned int GLuint;
 typedef float GLfloat;
 typedef double GLdouble;
 typedef float GLclampf;
-typedef void GLvoid;
 typedef void (*PFNGLACTIVETEXTUREARBPROC)(GLenum);
 typedef void (*PFNGLCLIENTACTIVETEXTUREARBPROC)(GLenum);
 
@@ -101,8 +100,6 @@ enum
 	GL_TEXTURE_ENV_MODE = 0x2200,
 	GL_COMBINE = 0x8570,
 	GL_COMBINE_RGB = 0x8571,
-	GL_COMBINE_EXT = 0x8570,
-	GL_COMBINE_RGB_EXT = 0x8571,
 	GL_MODULATE = 0x2100,
 	GL_TRANSFORM_HINT_APPLE = 0x26A0,
 	GL_FILL = 0x1B02,

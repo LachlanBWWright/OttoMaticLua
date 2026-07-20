@@ -74,4 +74,5 @@ If you want to build the game **manually** instead, the rest of this document de
     If you'd like to enable runtime sanitizers, append `-DSANITIZE=1` to the **first** `cmake` call above.
     To start prototyping the Nintendo DS homebrew graphics backend, configure the build with `-DOTTO_DS_HOMEBREW=ON`.
     That selects the new DS-targeted backend for that build. Desktop builds use the OpenGL backend by default when `OTTO_DS_HOMEBREW` is OFF.
+    The DS backend is currently an experimental compatibility scaffold with stubbed graphics entry points, so it is intended for early prototyping rather than full feature parity.
 1. The game gets built in `build/OttoMatic`. Enjoy!

@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#define GRAPHICS_API_MAX_QUERY_ELEMENTS 16 /* Enough for common matrix/vector queries such as projection matrices */
+
 void GraphicsApi_Initialize(void)
 {
 }
@@ -245,8 +247,9 @@ void glGenTextures(GLsizei n, GLuint* textures)
 void glGetBooleanv(GLenum pname, GLboolean* params)
 {
 	(void)pname;
+	/* DS/homebrew stubs only zero a small fixed query buffer for build-time compatibility. */
 	if (params != NULL)
-		memset(params, 0, sizeof(GLboolean));
+		memset(params, 0, GRAPHICS_API_MAX_QUERY_ELEMENTS * sizeof(GLboolean));
 }
 
 GLenum glGetError(void)
@@ -257,15 +260,17 @@ GLenum glGetError(void)
 void glGetFloatv(GLenum pname, GLfloat* params)
 {
 	(void)pname;
+	/* DS/homebrew stubs only zero a small fixed query buffer for build-time compatibility. */
 	if (params != NULL)
-		memset(params, 0, sizeof(GLfloat));
+		memset(params, 0, GRAPHICS_API_MAX_QUERY_ELEMENTS * sizeof(GLfloat));
 }
 
 void glGetIntegerv(GLenum pname, GLint* params)
 {
 	(void)pname;
+	/* DS/homebrew stubs only zero a small fixed query buffer for build-time compatibility. */
 	if (params != NULL)
-		memset(params, 0, sizeof(GLint));
+		memset(params, 0, GRAPHICS_API_MAX_QUERY_ELEMENTS * sizeof(GLint));
 }
 
 const GLubyte* glGetString(GLenum name)
