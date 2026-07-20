@@ -715,8 +715,8 @@ uint32_t 	materialFlags;
 
 			for (int i = 0; i < data->numMaterials; i++)
 			{
-				glActiveTextureARB(GL_TEXTURE0_ARB+i);								// activate texture layer #i
-				glClientActiveTextureARB(GL_TEXTURE0_ARB+i);
+				OGL_ActiveTexture(GL_TEXTURE0_ARB+i);								// activate texture layer #i
+				OGL_ClientActiveTexture(GL_TEXTURE0_ARB+i);
 				glEnable(GL_TEXTURE_2D);
 
 				glTexCoordPointer(2, GL_FLOAT, 0,data->uvs[i]);						// enable uv arrays
@@ -773,8 +773,8 @@ use_current:
 						case	MULTI_TEXTURE_MODE_REFLECTIONSPHERE:
 								for (int i = 0; i < 2; i++)
 								{
-									glActiveTextureARB(GL_TEXTURE0_ARB+i);								// activate texture layer #i
-									glClientActiveTextureARB(GL_TEXTURE0_ARB+i);
+									OGL_ActiveTexture(GL_TEXTURE0_ARB+i);										// activate texture layer #i
+									OGL_ClientActiveTexture(GL_TEXTURE0_ARB+i);
 									glEnable(GL_TEXTURE_2D);
 
 									if (i == 0)
@@ -822,8 +822,8 @@ use_current:
 						case	MULTI_TEXTURE_MODE_OBJECT_PLANE:
 								for (int i = 0; i < 2; i++)
 								{
-									glActiveTextureARB(GL_TEXTURE0_ARB+i);								// activate texture layer #i
-									glClientActiveTextureARB(GL_TEXTURE0_ARB+i);
+									OGL_ActiveTexture(GL_TEXTURE0_ARB+i);										// activate texture layer #i
+									OGL_ClientActiveTexture(GL_TEXTURE0_ARB+i);
 									glEnable(GL_TEXTURE_2D);
 
 									if (i == 0)
@@ -917,14 +917,14 @@ go_here:
 
 	if (multiTexture)
 	{
-		glActiveTextureARB(GL_TEXTURE1_ARB);			// turn off textureing for multi-texture layer 2 since it isnt needed anymore
-		glClientActiveTextureARB(GL_TEXTURE1_ARB);
+		OGL_ActiveTexture(GL_TEXTURE1_ARB);			// turn off texturing for multi-texture layer 2 since it isn't needed anymore
+		OGL_ClientActiveTexture(GL_TEXTURE1_ARB);
 		glDisable(GL_TEXTURE_2D);
 		glDisable(GL_TEXTURE_GEN_S);
 		glDisable(GL_TEXTURE_GEN_T);
 
-		glActiveTextureARB(GL_TEXTURE0_ARB);			// make sure #0 is active when we leave
-		glClientActiveTextureARB(GL_TEXTURE0_ARB);
+		OGL_ActiveTexture(GL_TEXTURE0_ARB);			// make sure #0 is active when we leave
+		OGL_ClientActiveTexture(GL_TEXTURE0_ARB);
 		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 		glDisable(GL_TEXTURE_GEN_S);
 		glDisable(GL_TEXTURE_GEN_T);
