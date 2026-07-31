@@ -22,9 +22,14 @@ extern "C"
 
 		/* HEADERS */
 
+#ifdef NDS
+// Nintendo DS build - use NDS compatibility headers instead of SDL/OpenGL
+#include "nds_compat.h"
+#else
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
 #include <SDL3/SDL_opengl_glext.h>
+#endif
 
 #include "Pomme.h"
 
@@ -83,9 +88,12 @@ extern "C"
 // Call this inside long-running while-loops so the browser event loop
 // can process rendering, input, and other events.
 // On non-Emscripten builds this is a no-op.
+// On NDS builds, yield to VBlank interrupt.
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #define GAME_YIELD_BROWSER() emscripten_sleep(0)
+#elif defined(NDS)
+#define GAME_YIELD_BROWSER() NDS_WaitVBlank()
 #else
 #define GAME_YIELD_BROWSER() ((void)0)
 #endif
