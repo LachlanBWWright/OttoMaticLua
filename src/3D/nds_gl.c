@@ -59,8 +59,9 @@ static struct {
     const GLfloat* normalPointer;
     GLsizei normalStride;
 
-    const GLfloat* colorPointer;
+    const void* colorPointer;
     GLint colorSize;
+    GLenum colorType;
     GLsizei colorStride;
 
     const GLfloat* texCoordPointer;
@@ -904,10 +905,15 @@ void NDS_glNormalPointer(GLenum type, GLsizei stride, const void* pointer)
 
 void NDS_glColorPointer(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    (void)type;
-    gNDS_VertexArrayState.colorPointer = (const GLfloat*)pointer;
+    gNDS_VertexArrayState.colorPointer = pointer;
     gNDS_VertexArrayState.colorSize = size;
-    gNDS_VertexArrayState.colorStride = stride ? stride : (size * sizeof(GLfloat));
+    gNDS_VertexArrayState.colorType = type;
+    if (stride)
+        gNDS_VertexArrayState.colorStride = stride;
+    else if (type == GL_UNSIGNED_BYTE)
+        gNDS_VertexArrayState.colorStride = size * sizeof(GLubyte);
+    else
+        gNDS_VertexArrayState.colorStride = size * sizeof(GLfloat);
 }
 
 void NDS_glTexCoordPointer(GLint size, GLenum type, GLsizei stride, const void* pointer)
@@ -933,8 +939,16 @@ static void NDS_SubmitArrayVertex(int index)
     if (gNDS_VertexArrayState.colorArrayEnabled && gNDS_VertexArrayState.colorPointer)
     {
         const uint8_t* base = (const uint8_t*)gNDS_VertexArrayState.colorPointer;
-        const GLfloat* c = (const GLfloat*)(base + index * gNDS_VertexArrayState.colorStride);
-        glColor3b((uint8_t)(c[0] * 255.0f), (uint8_t)(c[1] * 255.0f), (uint8_t)(c[2] * 255.0f));
+        const uint8_t* data = base + index * gNDS_VertexArrayState.colorStride;
+        if (gNDS_VertexArrayState.colorType == GL_UNSIGNED_BYTE)
+        {
+            glColor3b(data[0], data[1], data[2]);
+        }
+        else
+        {
+            const GLfloat* c = (const GLfloat*)data;
+            glColor3b((uint8_t)(c[0] * 255.0f), (uint8_t)(c[1] * 255.0f), (uint8_t)(c[2] * 255.0f));
+        }
     }
 
     // Texture coordinates
