@@ -509,12 +509,206 @@ typedef void* SDL_Gamepad;
 typedef uint32_t SDL_GamepadButton;
 typedef uint32_t SDL_Keycode;
 typedef uint32_t SDL_Scancode;
+typedef uint32_t SDL_JoystickID;
+typedef uint32_t SDL_DisplayID;
+typedef int16_t Sint16;
+typedef uint16_t Uint16;
+typedef uint32_t Uint32;
+typedef uint8_t Uint8;
+typedef int32_t Sint32;
+
+// SDL log category stubs
+#define SDL_LOG_CATEGORY_APPLICATION 0
 
 // SDL log stub
 #define SDL_Log(fmt, ...) iprintf(fmt "\n", ##__VA_ARGS__)
+#define SDL_LogError(cat, fmt, ...) iprintf("ERR: " fmt "\n", ##__VA_ARGS__)
+
+// SDL utility function stubs (map to standard C equivalents)
+#define SDL_memset memset
+#define SDL_memcpy memcpy
+#define SDL_snprintf snprintf
+#define SDL_vsnprintf vsnprintf
+#define SDL_malloc malloc
+#define SDL_calloc calloc
+#define SDL_realloc realloc
+#define SDL_free free
+#define SDL_strcmp strcmp
+#define SDL_strncmp strncmp
+#define SDL_strlen strlen
+#define SDL_strlcpy(dst, src, sz) strncpy(dst, src, sz)
+#define SDL_abs abs
+#define SDL_sscanf sscanf
+#define SDL_strchr strchr
+#define SDL_strncmp strncmp
+#define SDL_qsort qsort
+#define SDL_memcmp memcmp
+
+// SDL locale stub
+typedef struct { const char* language; const char* country; } SDL_Locale;
+static inline SDL_Locale** SDL_GetPreferredLocales(int* count) { *count = 0; return NULL; }
+
+// SDL scancode stubs - provide constants so code referencing them compiles
+// On NDS, GetKeyState/GetNewKeyState always return false, so these are never matched
+#define SDL_SCANCODE_COUNT       512
+#define SDL_SCANCODE_RETURN      40
+#define SDL_SCANCODE_ESCAPE      41
+#define SDL_SCANCODE_LALT        226
+#define SDL_SCANCODE_RALT        230
+#define SDL_SCANCODE_LCTRL       224
+#define SDL_SCANCODE_RCTRL       228
+#define SDL_SCANCODE_LGUI        227
+#define SDL_SCANCODE_RGUI        231
+#define SDL_SCANCODE_LSHIFT      225
+#define SDL_SCANCODE_RSHIFT      229
+#define SDL_SCANCODE_KP_PLUS     87
+#define SDL_SCANCODE_GRAVE       53
+#define SDL_SCANCODE_F8          65
+#define SDL_SCANCODE_F9          66
+#define SDL_SCANCODE_F10         67
+#define SDL_SCANCODE_M           16
+#define SDL_SCANCODE_F           9
+#define SDL_SCANCODE_W           26
+#define SDL_SCANCODE_L           15
+#define SDL_SCANCODE_B           5
+#define SDL_SCANCODE_R           21
+#define SDL_SCANCODE_I           12
+#define SDL_SCANCODE_C           6
+#define SDL_SCANCODE_Q           20
+#define SDL_SCANCODE_MINUS       45
+#define SDL_SCANCODE_EQUALS      46
+#define SDL_SCANCODE_COMMA       54
+#define SDL_SCANCODE_PERIOD      55
+#define SDL_SCANCODE_1           30
+#define SDL_SCANCODE_2           31
+#define SDL_SCANCODE_3           32
+#define SDL_SCANCODE_4           33
+#define SDL_SCANCODE_5           34
+#define SDL_SCANCODE_6           35
+#define SDL_SCANCODE_7           36
+#define SDL_SCANCODE_8           37
+#define SDL_SCANCODE_9           38
+#define SDL_SCANCODE_0           39
+
+// SDL mouse button stubs
+#define SDL_BUTTON_LEFT    1
+#define SDL_BUTTON_MIDDLE  2
+#define SDL_BUTTON_RIGHT   3
+
+// SDL gamepad axis stubs
+#define SDL_GAMEPAD_AXIS_LEFTX          0
+#define SDL_GAMEPAD_AXIS_LEFTY          1
+#define SDL_GAMEPAD_AXIS_RIGHTX         2
+#define SDL_GAMEPAD_AXIS_RIGHTY         3
+#define SDL_GAMEPAD_AXIS_LEFT_TRIGGER   4
+#define SDL_GAMEPAD_AXIS_RIGHT_TRIGGER  5
+
+// SDL gamepad button constants
+#define SDL_GAMEPAD_BUTTON_INVALID       (-1)
+#define SDL_GAMEPAD_BUTTON_SOUTH         0
+#define SDL_GAMEPAD_BUTTON_EAST          1
+#define SDL_GAMEPAD_BUTTON_WEST          2
+#define SDL_GAMEPAD_BUTTON_NORTH         3
+#define SDL_GAMEPAD_BUTTON_BACK          4
+#define SDL_GAMEPAD_BUTTON_GUIDE         5
+#define SDL_GAMEPAD_BUTTON_START         6
+#define SDL_GAMEPAD_BUTTON_LEFT_STICK    7
+#define SDL_GAMEPAD_BUTTON_RIGHT_STICK   8
+#define SDL_GAMEPAD_BUTTON_LEFT_SHOULDER  9
+#define SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER 10
+#define SDL_GAMEPAD_BUTTON_DPAD_UP       11
+#define SDL_GAMEPAD_BUTTON_DPAD_DOWN     12
+#define SDL_GAMEPAD_BUTTON_DPAD_LEFT     13
+#define SDL_GAMEPAD_BUTTON_DPAD_RIGHT    14
+#define SDL_GAMEPAD_BUTTON_COUNT         15
+#define SDL_GAMEPAD_AXIS_COUNT           6
+
+// SDL key stubs
+#define SDLK_Q  'q'
+#define SDL_GetScancodeFromKey(k, m) (0)
 
 // SDL hide cursor stub
 #define SDL_HideCursor() ((void)0)
+#define SDL_ShowCursor() ((void)0)
+#define SDL_CursorVisible() (false)
+
+// SDL cursor stubs
+typedef void* SDL_Cursor;
+#define SDL_SYSTEM_CURSOR_DEFAULT  0
+#define SDL_SYSTEM_CURSOR_POINTER  1
+#define SDL_CreateSystemCursor(id) (NULL)
+#define SDL_SetCursor(c) ((void)0)
+#define SDL_GetCursor() (NULL)
+#define SDL_DestroyCursor(c) ((void)0)
+
+// SDL mouse stubs
+#define SDL_GetWindowSize(w, pw, ph) do { *(pw) = NDS_SCREEN_WIDTH; *(ph) = NDS_SCREEN_HEIGHT; } while(0)
+
+// SDL event/pump stubs
+#define SDL_PumpEvents() ((void)0)
+#define SDL_FlushEvents(a, b) ((void)0)
+#define SDL_WINDOWPOS_CENTERED_DISPLAY(d) (0)
+
+// SDL window stubs
+#define SDL_SetWindowFullscreen(w, f) ((void)0)
+#define SDL_SetWindowSize(w, x, y) ((void)0)
+#define SDL_SetWindowPosition(w, x, y) ((void)0)
+#define SDL_SyncWindow(w) ((void)0)
+#define SDL_GetWindowSizeInPixels(w, pw, ph) do { *(pw) = NDS_SCREEN_WIDTH; *(ph) = NDS_SCREEN_HEIGHT; } while(0)
+#define SDL_GetDisplayForWindow(w) (0)
+#define SDL_ShowWindow(w) ((void)0)
+#define SDL_HideWindow(w) ((void)0)
+#define SDL_SetWindowMouseGrab(w, g) ((void)0)
+#define SDL_SetWindowRelativeMouseMode(w, m) ((void)0)
+#define SDL_GetWindowRelativeMouseMode(w) (false)
+#define SDL_GetMouseState(x, y) (0)
+#define SDL_ShowSimpleMessageBox(f, t, m, w) ((void)0)
+
+// SDL gamepad stubs
+#define SDL_GetGamepadAxis(g, a) (0)
+#define SDL_GetGamepadButton(g, b) (0)
+#define SDL_GetGamepadID(g) (0)
+#define SDL_RumbleGamepad(g, lo, hi, ms) ((void)0)
+#define SDL_IsGamepad(id) (false)
+#define SDL_OpenGamepad(id) (NULL)
+#define SDL_CloseGamepad(g) ((void)0)
+#define SDL_GetJoysticks(n) (*(n) = 0, (SDL_JoystickID*)NULL)
+#define SDL_GetJoystickNameForID(id) ("NDS")
+#define SDL_GetGamepadName(g) ("NDS")
+#define SDL_GetGamepadStringForButton(b) ("?")
+#define SDL_GetGamepadStringForAxis(a) ("?")
+#define SDL_GetScancodeName(s) ("?")
+
+// SDL text input stubs
+#define SDL_StartTextInput(w) ((void)0)
+#define SDL_StopTextInput(w) ((void)0)
+
+// SDL window flags stubs
+#define SDL_WINDOW_INPUT_FOCUS  0x0200
+#define SDL_GetWindowFlags(w) (0)
+
+// SDL ticks
+#define SDL_GetTicksNS() (0ULL)
+
+// SDL Rect type stub
+typedef struct { int x, y, w, h; } SDL_Rect;
+#define SDL_GetDisplayUsableBounds(d, r) ((void)0)
+#define SDL_GetDisplays(n) (*(n) = 1, (SDL_DisplayID*)NULL)
+
+// SDL keyboard stubs
+#define SDL_GetKeyboardState(n) (NULL)
+
+// SDL performance counter stubs
+#define SDL_GetPerformanceCounter() (0ULL)
+#define SDL_GetPerformanceFrequency() (1ULL)
+#define SDL_Delay(ms) swiDelay((ms) * 8000)
+
+// SDL fallthrough attribute
+#define SDL_FALLTHROUGH /* fallthrough */
+
+// SDL message box
+#define SDL_MESSAGEBOX_ERROR    0
+#define SDL_MESSAGEBOX_WARNING  1
 
 // SDL GL stubs
 #define SDL_GL_MakeCurrent(w, c) ((void)0)
