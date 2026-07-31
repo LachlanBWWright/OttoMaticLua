@@ -256,6 +256,10 @@ void OGL_DisposeWindowSetup(void)
 
 static void OGL_CreateDrawContext(void)
 {
+#ifdef NDS
+	// NDS graphics context is already initialized in NDS_InitGraphics()
+	OGL_InitFunctions();
+#else
 	GAME_ASSERT_MESSAGE(!gAGLContext, "GL context already exists");
 	GAME_ASSERT_MESSAGE(gSDLWindow, "Window must be created before the DC!");
 
@@ -291,6 +295,7 @@ static void OGL_CreateDrawContext(void)
 	if (maxTexSize < 1024)
 		DoFatalAlert("Your video card cannot do 1024x1024 textures, so it is below the game's minimum system requirements.");
 	SDL_Log("OGL_CreateDrawContext: Done");
+#endif // NDS
 }
 
 
@@ -302,6 +307,9 @@ static void OGL_CreateDrawContext(void)
 
 static void OGL_DisposeDrawContext(void)
 {
+#ifdef NDS
+	// NDS doesn't have a separate draw context to dispose
+#else
 	if (!gAGLContext)
 	{
 		return;
@@ -310,6 +318,7 @@ static void OGL_DisposeDrawContext(void)
 	SDL_GL_MakeCurrent(gSDLWindow, NULL);		// make context not current
 	SDL_GL_DestroyContext(gAGLContext);			// nuke context
 	gAGLContext = nil;
+#endif
 }
 
 
@@ -375,7 +384,11 @@ static void OGL_InitDrawContext(OGLViewDefType* viewDefPtr)
 	glClearColor(0,0,0, 1.0);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glClear(GL_COLOR_BUFFER_BIT);
+#ifdef NDS
+	NDS_SwapBuffers();
+#else
 	SDL_GL_SwapWindow(gSDLWindow);
+#endif
 	glClear(GL_COLOR_BUFFER_BIT);
 	glClearColor(viewDefPtr->clearColor.r, viewDefPtr->clearColor.g, viewDefPtr->clearColor.b, 1.0);
 
@@ -515,15 +528,21 @@ void OGL_DrawScene(void (*drawRoutine)(void))
 	GAME_ASSERT(gGameViewInfoPtr);						// make sure it's legit
 	GAME_ASSERT(gGameViewInfoPtr->isActive);
 
+#ifndef NDS
 	bool didMakeCurrent = SDL_GL_MakeCurrent(gSDLWindow, gAGLContext);		// make context active
 	GAME_ASSERT_MESSAGE(didMakeCurrent, SDL_GetError());
+#endif
 
 
 	if (gGammaFadeFrac <= 0)							// if we just finished fading out and haven't started fading in yet, just show black
 	{
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
+#ifdef NDS
+		NDS_SwapBuffers();
+#else
 		SDL_GL_SwapWindow(gSDLWindow);					// end render loop
+#endif
 		return;
 	}
 
@@ -668,6 +687,35 @@ do_anaglyph:
 	else if (gDebugMode == 1 || gDebugMode == 2)
 	{
 		char debugString[1024];
+#ifdef NDS
+		snprintf(
+			debugString,
+			sizeof(debugString),
+			"fps:\t\t%d\n"
+			"tris:\t\t%d\n"
+			"verts:\t\t%d\n"
+			"\n"
+			"player x:\t%.1f\n"
+			"player z:\t%.1f\n"
+			"player y:\t%.1f\n"
+			"\n"
+			"nodes:\t%d\n"
+			"enemies:\t%d\n"
+			"\nOtto Matic NDS %s\n%s, %s"
+			,
+			(int)(gFramesPerSecond+.5f),
+			gPolysThisFrame,
+			gVerticesThisFrame,
+			gPlayerInfo.coord.x,
+			gPlayerInfo.coord.z,
+			gPlayerInfo.coord.y,
+			gNumObjectNodes,
+			gNumEnemies,
+			GAME_VERSION,
+			(const char*) glGetString(GL_RENDERER),
+			(const char*) glGetString(GL_VERSION)
+		);
+#else
 		SDL_snprintf(
 			debugString,
 			sizeof(debugString),
@@ -756,6 +804,7 @@ do_anaglyph:
 			(const char*) glGetString(GL_VERSION),
 			SDL_GetCurrentVideoDriver()
 		);
+#endif // !NDS
 		TextMesh_Update(debugString, 0, gDebugText);
 		gDebugText->StatusBits &= ~STATUS_BIT_HIDDEN;
 	}
@@ -772,7 +821,12 @@ do_anaglyph:
 
            /* SWAP THE BUFFS */
 
+#ifdef NDS
+	NDS_SwapBuffers();
+	NDS_WaitVBlank();
+#else
 	SDL_GL_SwapWindow(gSDLWindow);					// end render loop
+#endif
 
 
 	if (gGamePrefs.anaglyphMode != ANAGLYPH_OFF)
@@ -791,7 +845,12 @@ void OGL_GetCurrentViewport(int *x, int *y, int *w, int *h)
 {
 int	t,b,l,r;
 
+#ifdef NDS
+	gGameWindowWidth = NDS_SCREEN_WIDTH;
+	gGameWindowHeight = NDS_SCREEN_HEIGHT;
+#else
 	SDL_GetWindowSizeInPixels(gSDLWindow, &gGameWindowWidth, &gGameWindowHeight);
+#endif
 
 	t = gGameViewInfoPtr->clip.top;
 	b = gGameViewInfoPtr->clip.bottom;
