@@ -714,6 +714,13 @@ typedef struct { int x, y, w, h; } SDL_Rect;
 #define SDL_GL_MakeCurrent(w, c) ((void)0)
 #define SDL_GL_SwapWindow(w) NDS_SwapBuffers()
 #define SDL_GL_SetSwapInterval(i) ((void)0)
+#define SDL_GL_CreateContext(w) (NULL)
+#define SDL_GL_DestroyContext(c) ((void)0)
+
+// SDL error/info stubs
+#define SDL_GetError() ("NDS: no SDL")
+#define SDL_GetRevision() ("NDS")
+#define SDL_GetCurrentVideoDriver() ("NDS videoGL")
 
 // SDL timer
 #define SDL_GetTicks() NDS_GetTicks()
