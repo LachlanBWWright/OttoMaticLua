@@ -3,7 +3,202 @@
 // This file is part of Otto Matic. https://github.com/jorio/ottomatic
 
 #include "game.h"
-#include "mousesmoothing.h"
+
+#ifdef NDS
+/******************************************************************************/
+/*                       NDS INPUT IMPLEMENTATION                             */
+/******************************************************************************/
+
+#include <nds.h>
+
+typedef uint8_t KeyState;
+
+enum
+{
+	KEYSTATE_ACTIVE_BIT		= 0b001,
+	KEYSTATE_CHANGE_BIT		= 0b010,
+	KEYSTATE_IGNORE_BIT		= 0b100,
+
+	KEYSTATE_OFF			= 0b000,
+	KEYSTATE_PRESSED		= KEYSTATE_ACTIVE_BIT | KEYSTATE_CHANGE_BIT,
+	KEYSTATE_HELD			= KEYSTATE_ACTIVE_BIT,
+	KEYSTATE_UP				= KEYSTATE_OFF | KEYSTATE_CHANGE_BIT,
+	KEYSTATE_IGNOREHELD		= KEYSTATE_OFF | KEYSTATE_IGNORE_BIT,
+};
+
+static KeyState		gNeedStates[NUM_CONTROL_NEEDS];
+static KeyState		gMouseButtonState[NUM_SUPPORTED_MOUSE_BUTTONS + 2];
+static KeyState		gRawKeyboardState[512]; // large enough for any scancode mapping
+static uint32_t		gNDSKeysHeld = 0;
+static uint32_t		gNDSKeysDown = 0;
+
+char				gTextInput[64];
+Boolean				gUserPrefersGamepad = false;
+Boolean				gMouseMotionNow = false;
+Boolean				gEatMouse = false;
+OGLVector2D			gMouseDelta = {0, 0};
+
+static void UpdateKeyState(KeyState* state, bool downNow)
+{
+	switch (*state)
+	{
+		case KEYSTATE_HELD:
+		case KEYSTATE_PRESSED:
+			*state = downNow ? KEYSTATE_HELD : KEYSTATE_UP;
+			break;
+		case KEYSTATE_OFF:
+		case KEYSTATE_UP:
+			*state = downNow ? KEYSTATE_PRESSED : KEYSTATE_OFF;
+			break;
+		case KEYSTATE_IGNOREHELD:
+			if (!downNow)
+				*state = KEYSTATE_OFF;
+			break;
+	}
+}
+
+// Map NDS keys to game needs
+static struct { uint32_t ndsKey; int needID; } gNDSKeyMap[] = {
+	{ KEY_UP,      kNeed_Forward },
+	{ KEY_DOWN,    kNeed_Backward },
+	{ KEY_LEFT,    kNeed_TurnLeft },
+	{ KEY_RIGHT,   kNeed_TurnRight },
+	{ KEY_A,       kNeed_Jump },
+	{ KEY_B,       kNeed_Shoot },
+	{ KEY_X,       kNeed_PunchPickup },
+	{ KEY_Y,       kNeed_CameraMode },
+	{ KEY_L,       kNeed_PrevWeapon },
+	{ KEY_R,       kNeed_NextWeapon },
+	{ KEY_START,   kNeed_UIStart },
+	{ KEY_SELECT,  kNeed_UIPause },
+	// UI mappings
+	{ KEY_UP,      kNeed_UIUp },
+	{ KEY_DOWN,    kNeed_UIDown },
+	{ KEY_LEFT,    kNeed_UILeft },
+	{ KEY_RIGHT,   kNeed_UIRight },
+	{ KEY_A,       kNeed_UIConfirm },
+	{ KEY_B,       kNeed_UIBack },
+};
+
+void InitInput(void)
+{
+	memset(gNeedStates, KEYSTATE_OFF, sizeof(gNeedStates));
+	memset(gMouseButtonState, KEYSTATE_OFF, sizeof(gMouseButtonState));
+	memset(gRawKeyboardState, KEYSTATE_OFF, sizeof(gRawKeyboardState));
+}
+
+void UpdateInput(void)
+{
+	gTextInput[0] = '\0';
+	gMouseMotionNow = false;
+	gEatMouse = false;
+
+	scanKeys();
+	gNDSKeysHeld = keysHeld();
+	gNDSKeysDown = keysDown();
+
+	// Update need states based on NDS key mapping
+	for (int i = 0; i < NUM_CONTROL_NEEDS; i++)
+	{
+		bool downNow = false;
+		for (unsigned j = 0; j < sizeof(gNDSKeyMap)/sizeof(gNDSKeyMap[0]); j++)
+		{
+			if (gNDSKeyMap[j].needID == i && (gNDSKeysHeld & gNDSKeyMap[j].ndsKey))
+			{
+				downNow = true;
+				break;
+			}
+		}
+		UpdateKeyState(&gNeedStates[i], downNow);
+	}
+}
+
+void CaptureMouse(Boolean doCapture)
+{
+	(void)doCapture;
+	// NDS: no mouse capture
+}
+
+void EatMouseEvents(void)
+{
+	gEatMouse = true;
+}
+
+Boolean GetNewKeyState(unsigned short sdlScanCode)
+{
+	(void)sdlScanCode;
+	return false; // NDS doesn't use scancodes
+}
+
+Boolean GetKeyState(unsigned short sdlScanCode)
+{
+	(void)sdlScanCode;
+	return false; // NDS doesn't use scancodes
+}
+
+Boolean GetNewNeedState(int needID)
+{
+	if (needID >= NUM_CONTROL_NEEDS) return false;
+	return gNeedStates[needID] == KEYSTATE_PRESSED;
+}
+
+Boolean GetNeedState(int needID)
+{
+	if (needID >= NUM_CONTROL_NEEDS) return false;
+	return 0 != (gNeedStates[needID] & KEYSTATE_ACTIVE_BIT);
+}
+
+Boolean FlushMouseButtonPress(uint8_t sdlButton)
+{
+	(void)sdlButton;
+	return false; // NDS: use touchscreen later
+}
+
+Boolean UserWantsOut(void)
+{
+	return GetNewNeedState(kNeed_UIConfirm)
+		|| GetNewNeedState(kNeed_UIBack)
+		|| GetNewNeedState(kNeed_UIStart);
+}
+
+Boolean IsCmdQPressed(void)
+{
+	return false;
+}
+
+Boolean GetCheatKeyCombo(void)
+{
+	// L+R+SELECT on NDS
+	return (gNDSKeysHeld & (KEY_L | KEY_R | KEY_SELECT)) == (KEY_L | KEY_R | KEY_SELECT);
+}
+
+void Rumble(float strength, uint32_t ms)
+{
+	(void)strength;
+	(void)ms;
+	// NDS: no rumble (unless Rumble Pak is present)
+}
+
+float SnapAngle(float angle, float snap)
+{
+	if (angle >= -snap && angle <= snap)
+		return 0;
+	else if (angle >= PI/2 - snap && angle <= PI/2 + snap)
+		return PI/2;
+	else if (angle >= PI - snap || angle <= -PI + snap)
+		return PI;
+	else if (angle >= -PI/2 - snap && angle <= -PI/2 + snap)
+		return -PI/2;
+	else
+		return angle;
+}
+
+void SetMacLinearMouse(int linear)
+{
+	(void)linear;
+}
+
+#else /* !NDS - Original SDL implementation follows */
 
 
 /***************/
@@ -601,3 +796,5 @@ static OGLVector2D GetThumbStickVector(bool rightStick)
 		return (OGLVector2D) { cosf(angle) * magnitude, sinf(angle) * magnitude };
 	}
 }
+
+#endif /* !NDS */

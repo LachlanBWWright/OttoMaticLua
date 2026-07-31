@@ -43,6 +43,14 @@ float	gFramesPerSecond, gFramesPerSecondFrac;
 
 void DoAlert(const char* format, ...)
 {
+#ifdef NDS
+	char message[256];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(message, sizeof(message), format, args);
+	va_end(args);
+	iprintf("ALERT: %s\n", message);
+#else
 	Enter2D();
 
 	char message[1024];
@@ -53,6 +61,7 @@ void DoAlert(const char* format, ...)
 
 	SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Game Alert: %s", message);
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, GAME_FULL_NAME, message, gSDLWindow);
+#endif
 }
 
 
@@ -60,6 +69,15 @@ void DoAlert(const char* format, ...)
 
 void DoFatalAlert(const char* format, ...)
 {
+#ifdef NDS
+	char message[256];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(message, sizeof(message), format, args);
+	va_end(args);
+	iprintf("FATAL: %s\n", message);
+	while(1) swiWaitForVBlank(); // halt
+#else
 	if (gSDLWindow)
 		SDL_SetWindowFullscreen(gSDLWindow, 0);
 
@@ -72,6 +90,7 @@ void DoFatalAlert(const char* format, ...)
 	SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Game Fatal Alert: %s", message);
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, GAME_FULL_NAME, message, gSDLWindow);
 	ExitToShell();
+#endif
 }
 
 
@@ -99,7 +118,9 @@ static Boolean	beenHere = false;
 		TextMesh_DisposeMetrics();
 	}
 
+#ifndef NDS
 	SDL_ShowCursor();
+#endif
 	MyFlushEvents();
 
 //	SavePrefs();							// save prefs before bailing
@@ -248,6 +269,19 @@ long		createdDirID;
 
 void CalcFramesPerSecond(void)
 {
+#ifdef NDS
+	// NDS: use a simple timer-based approach
+	static uint32_t prevTicks = 0;
+	uint32_t currTicks;
+
+	// Use ARM9 cycle counter or just assume ~60fps for NDS
+	// For now, target 30fps on NDS due to hardware limitations
+	gFramesPerSecond = 30.0f;
+	gFramesPerSecondFrac = 1.0f / gFramesPerSecond;
+
+	// Wait for vblank to maintain frame timing
+	swiWaitForVBlank();
+#else
 	static uint64_t performanceFrequency = 0;
 	static uint64_t prevTime = 0;
 	uint64_t currTime;
@@ -307,6 +341,7 @@ slow_down:
 	gFramesPerSecondFrac = 1.0f / gFramesPerSecond;		// calc fractional for multiplication
 
 	prevTime = currTime;								// reset for next time interval
+#endif /* !NDS */
 }
 
 
@@ -336,8 +371,12 @@ int		i;
 
 void MyFlushEvents(void)
 {
+#ifdef NDS
+	scanKeys(); // just read and discard
+#else
 	// Flush input events
 	SDL_FlushEvents(SDL_EVENT_KEY_DOWN, SDL_EVENT_FINGER_CANCELED);
+#endif
 }
 
 
