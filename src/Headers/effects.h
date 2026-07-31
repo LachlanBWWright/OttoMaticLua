@@ -6,8 +6,13 @@
 #pragma once
 
 
+#ifdef NDS
+#define	MAX_PARTICLE_GROUPS		16
+#define	MAX_PARTICLES			32		// heavily reduced for NDS poly budget
+#else
 #define	MAX_PARTICLE_GROUPS		120
 #define	MAX_PARTICLES			250		// (note change Byte below if > 255)
+#endif
 
 
 		/* FIRE & SMOKE */

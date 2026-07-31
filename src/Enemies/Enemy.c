@@ -41,10 +41,14 @@ short	i;
 
 	gNumEnemies = 0;
 
+#ifdef NDS
+	gMaxEnemies = 5;			// heavily limited for NDS poly budget
+#else
 	if (gG4)					// tweak based on horsepower
 		gMaxEnemies = 20;
 	else
 		gMaxEnemies = 16;
+#endif
 
 	for (i=0; i < NUM_ENEMY_KINDS; i++)
 		gNumEnemyOfKind[i] = 0;
