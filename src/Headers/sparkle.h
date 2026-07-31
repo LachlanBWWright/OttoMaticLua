@@ -2,7 +2,11 @@
 // sparkle.h
 //
 
+#ifdef NDS
+#define	MAX_SPARKLES	64
+#else
 #define	MAX_SPARKLES	600
+#endif
 
 enum
 {

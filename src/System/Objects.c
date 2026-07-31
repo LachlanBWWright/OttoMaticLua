@@ -468,6 +468,17 @@ short			skelType;
 		if (statusBits & (STATUS_BIT_ISCULLED|STATUS_BIT_HIDDEN))	// see if is culled or hidden
 			goto next;
 
+		/* NDS: ADDITIONAL DRAW DISTANCE CULLING */
+
+		if (theNode->Genre != CUSTOM_GENRE && theNode->Genre != SPRITE_GENRE && theNode->Genre != TEXTMESH_GENRE)
+		{
+			if (!NDS_IsObjectInDrawDistance(theNode->Coord.x, theNode->Coord.z, cameraX, cameraZ))
+			{
+				theNode->StatusBits |= STATUS_BIT_ISCULLED;
+				goto next;
+			}
+		}
+
 
 		if (theNode->CType == INVALID_NODE_FLAG)				// see if already deleted
 			goto next;
@@ -740,27 +751,40 @@ short			skelType;
 
 					if (theNode == gPlayerInfo.objNode)
 						UpdatePlayerMotionBlur(theNode);
-			
+		
 					numTriMeshes = theNode->Skeleton->skeletonDefinition->numDecomposedTriMeshes;
 					skelType = theNode->Type;
 
 					overrideTexture = theNode->Skeleton->overrideTexture;							// get any override texture ref (illegal ref)
 
-					for (i = 0; i < numTriMeshes; i++)												// submit each trimesh of it
+					/* NDS: Check poly budget before drawing skeleton meshes */
 					{
-						if (overrideTexture)														// set override texture
+						float objDist = NDS_GetObjectDistance(theNode->Coord.x, theNode->Coord.z, cameraX, cameraZ);
+						int modelLOD = NDS_GetModelLODForDistance(objDist);
+
+						for (i = 0; i < numTriMeshes; i++)												// submit each trimesh of it
 						{
-							if (gLocalTriMeshesOfSkelType[skelType][i].numMaterials > 0)
+							int meshTriCount = gLocalTriMeshesOfSkelType[skelType][i].numTriangles;
+							int lodTriCount = NDS_GetMaxTrisForLOD(modelLOD, meshTriCount);
+
+							if (!NDS_CanDrawPolys(lodTriCount, 1))		// 1 = objects budget
+								break;
+
+							if (overrideTexture)														// set override texture
 							{
-								oldTexture = gLocalTriMeshesOfSkelType[skelType][i].materials[0];		// get the normal texture for this mesh
-								gLocalTriMeshesOfSkelType[skelType][i].materials[0] = overrideTexture;	// set the override one temporarily
+								if (gLocalTriMeshesOfSkelType[skelType][i].numMaterials > 0)
+								{
+									oldTexture = gLocalTriMeshesOfSkelType[skelType][i].materials[0];		// get the normal texture for this mesh
+									gLocalTriMeshesOfSkelType[skelType][i].materials[0] = overrideTexture;	// set the override one temporarily
+								}
 							}
+
+							MO_DrawGeometry_VertexArray(&gLocalTriMeshesOfSkelType[skelType][i]);
+							NDS_AddDrawnPolys(lodTriCount, 1);
+
+							if (overrideTexture && oldTexture)											// see if need to set texture back to normal
+								gLocalTriMeshesOfSkelType[skelType][i].materials[0] = oldTexture;
 						}
-
-						MO_DrawGeometry_VertexArray(&gLocalTriMeshesOfSkelType[skelType][i]);
-
-						if (overrideTexture && oldTexture)											// see if need to set texture back to normal
-							gLocalTriMeshesOfSkelType[skelType][i].materials[0] = oldTexture;
 					}
 					break;
 

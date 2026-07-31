@@ -107,7 +107,9 @@ Boolean GetCheatKeyCombo(void);
 void Rumble(float strength, uint32_t ms);
 float SnapAngle(float angle, float snap);
 
+#ifndef NDS
 SDL_Gamepad* TryOpenGamepad(bool showMessageOnFailure);
 void OnJoystickRemoved(SDL_JoystickID which);
+#endif
 
 void SetMacLinearMouse(int linear);

@@ -901,6 +901,7 @@ static void DrawTerrain(ObjNode *theNode)
 int				r,c;
 uint16_t			i,unique;
 Boolean			superTileVisible;
+float			cameraX, cameraZ;
 
 #pragma unused(theNode)
 
@@ -917,6 +918,11 @@ Boolean			superTileVisible;
 
 
 	gNumSuperTilesDrawn	= 0;
+
+		/* GET CAMERA POSITION FOR LOD CALCULATIONS */
+
+	cameraX = gGameViewInfoPtr->cameraPlacement.cameraLocation.x;
+	cameraZ = gGameViewInfoPtr->cameraPlacement.cameraLocation.z;
 
 	/******************************************************************/
 	/* SCAN THE SUPERTILE GRID AND LOOK FOR USED & VISIBLE SUPERTILES */
@@ -946,31 +952,56 @@ Boolean			superTileVisible;
 				}
 
 
+					/* NDS: CHECK DRAW DISTANCE FOR SUPERTILE */
+
+				{
+					float stDist = NDS_GetObjectDistance(
+						gSuperTileMemoryList[i].x,
+						gSuperTileMemoryList[i].z,
+						cameraX, cameraZ);
+
+					if (stDist > gNDSPerf.drawDistCull)
+					{
+						gNDSPerf.supertilesCulledByDistance++;
+						continue;
+					}
+
+					/* NDS: CHECK POLYGON BUDGET FOR TERRAIN */
+
+					int lodLevel = NDS_GetTerrainLODForDistance(stDist);
+					int triCount = NDS_GetTerrainTriCount(lodLevel);
+
+					if (!NDS_CanDrawPolys(triCount, 0))		// 0 = terrain budget
+						continue;
+
+
 					/* SEE IF IS CULLED & DO SUPERTILE DEFORMATION */
 
-				superTileVisible = OGL_IsBBoxVisible(&gSuperTileMemoryList[i].bBox, nil);
+					superTileVisible = OGL_IsBBoxVisible(&gSuperTileMemoryList[i].bBox, nil);
 
-				if (superTileVisible || gCleanupDeformation)					// update deformation of this ST under these conditions
-					DoSuperTileDeformation(&gSuperTileMemoryList[i]);
+					if (superTileVisible || gCleanupDeformation)					// update deformation of this ST under these conditions
+						DoSuperTileDeformation(&gSuperTileMemoryList[i]);
 
-				if (!superTileVisible)
-					continue;
-
-
-
-						/***********************************/
-						/* DRAW THE MESH IN THIS SUPERTILE */
-						/***********************************/
-
-					/* SUBMIT THE TEXTURE */
-
-				MO_DrawMaterial(gSuperTileTextureObjects[unique]);
+					if (!superTileVisible)
+						continue;
 
 
-					/* SUBMIT THE GEOMETRY */
 
-				MO_DrawGeometry_VertexArray(gSuperTileMemoryList[i].meshData);
-				gNumSuperTilesDrawn++;
+							/***********************************/
+							/* DRAW THE MESH IN THIS SUPERTILE */
+							/***********************************/
+
+						/* SUBMIT THE TEXTURE */
+
+					MO_DrawMaterial(gSuperTileTextureObjects[unique]);
+
+
+						/* SUBMIT THE GEOMETRY */
+
+					MO_DrawGeometry_VertexArray(gSuperTileMemoryList[i].meshData);
+					NDS_AddDrawnPolys(triCount, 0);		// track terrain polys
+					gNumSuperTilesDrawn++;
+				}
 			}
 		}
 	}

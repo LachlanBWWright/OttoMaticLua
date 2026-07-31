@@ -39,7 +39,11 @@ enum
 	SUPERTILE_MODE_USED
 };
 
+#ifdef NDS
+#define	SUPERTILE_TEXMAP_SIZE		32												// reduced texture size for NDS VRAM
+#else
 #define	SUPERTILE_TEXMAP_SIZE		128												// the width & height of a supertile's texture
+#endif
 
 #define	OREOMAP_TILE_SIZE			16 												// pixel w/h of texture tile
 
@@ -57,7 +61,11 @@ enum
 #define	TERRAIN_SUPERTILE_UNIT_SIZE	(SUPERTILE_SIZE*TERRAIN_POLYGON_SIZE)			// world unit size of a supertile
 #define	TERRAIN_SUPERTILE_UNIT_SIZE_Frac (1.0f / TERRAIN_SUPERTILE_UNIT_SIZE)
 
+#ifdef NDS
+#define	SUPERTILE_ACTIVE_RANGE		4												// reduced for NDS poly/RAM budget
+#else
 #define	SUPERTILE_ACTIVE_RANGE		9
+#endif
 #define	SUPERTILE_ITEMRING_MARGIN	0												// # supertile margin for adding new items
 
 #define	SUPERTILE_DIST_WIDE			(SUPERTILE_ACTIVE_RANGE*2)

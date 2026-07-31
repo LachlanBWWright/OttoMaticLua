@@ -1,3 +1,9 @@
+#ifdef NDS
+// NDS does not use SDL or function pointers for GL functions.
+// All GL functions are mapped via nds_gl_compat.h macros.
+// OGL_InitFunctions is a no-op stub defined in ogl_functions.h.
+#else
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
 
@@ -49,3 +55,5 @@ void OGL_InitFunctions(void)
 	GAME_ASSERT(procptr_glClientActiveTextureARB);
 #endif
 }
+
+#endif // !NDS

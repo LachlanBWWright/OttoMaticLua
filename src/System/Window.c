@@ -246,6 +246,9 @@ static void DrawFadePane(ObjNode* theNode)
 
 void Enter2D(void)
 {
+#ifdef NDS
+	// NDS: no windowing system, no-op
+#else
 	// Linux: work around game window sent to background after showing a dialog box
 	// Windows: work around alert box appearing behind game
 #if !__APPLE__
@@ -253,6 +256,7 @@ void Enter2D(void)
 	SDL_HideWindow(gSDLWindow);
 	SDL_PumpEvents();
 #endif
+#endif // NDS
 }
 
 
@@ -260,11 +264,15 @@ void Enter2D(void)
 
 void Exit2D(void)
 {
+#ifdef NDS
+	// NDS: no windowing system, no-op
+#else
 #if !__APPLE__
 	SDL_PumpEvents();
 	SDL_ShowWindow(gSDLWindow);
 	SetFullscreenMode(false);
 #endif
+#endif // NDS
 }
 
 
@@ -272,6 +280,11 @@ void Exit2D(void)
 
 void GetDefaultWindowSize(SDL_DisplayID display, int* width, int* height)
 {
+#ifdef NDS
+	(void)display;
+	*width = NDS_SCREEN_WIDTH;
+	*height = NDS_SCREEN_HEIGHT;
+#else
 	const float aspectRatio = 16.0 / 9.0f;
 	const float screenCoverage = .8f;
 
@@ -288,16 +301,21 @@ void GetDefaultWindowSize(SDL_DisplayID display, int* width, int* height)
 		*width = displayBounds.w * screenCoverage;
 		*height = displayBounds.w * screenCoverage / aspectRatio;
 	}
+#endif
 }
 
 /******************** GET NUM DISPLAYS *******************/
 
 int GetNumDisplays(void)
 {
+#ifdef NDS
+	return 2; // NDS has two screens
+#else
 	int numDisplays = 0;
 	SDL_DisplayID* displays = SDL_GetDisplays(&numDisplays);
 	SDL_free(displays);
 	return numDisplays;
+#endif
 }
 
 /******************** MOVE WINDOW TO PREFERRED DISPLAY *******************/
@@ -308,6 +326,9 @@ int GetNumDisplays(void)
 
 void MoveToPreferredDisplay(void)
 {
+#ifdef NDS
+	// NDS: no display switching
+#else
 	if (gGamePrefs.displayNumMinus1 >= GetNumDisplays())
 	{
 		gGamePrefs.displayNumMinus1 = 0;
@@ -324,12 +345,17 @@ void MoveToPreferredDisplay(void)
 	int centered = SDL_WINDOWPOS_CENTERED_DISPLAY(display);
 	SDL_SetWindowPosition(gSDLWindow, centered, centered);
 	SDL_SyncWindow(gSDLWindow);
+#endif
 }
 
 /*********************** SET FULLSCREEN MODE **********************/
 
 void SetFullscreenMode(bool enforceDisplayPref)
 {
+#ifdef NDS
+	(void)enforceDisplayPref;
+	// NDS: always fullscreen, no-op
+#else
 	if (!gGamePrefs.fullscreen)
 	{
 		SDL_SetWindowFullscreen(gSDLWindow, 0);
@@ -363,4 +389,5 @@ void SetFullscreenMode(bool enforceDisplayPref)
 
 	SDL_GL_SetSwapInterval(gGamePrefs.vsync);
 	EatMouseEvents();
+#endif
 }

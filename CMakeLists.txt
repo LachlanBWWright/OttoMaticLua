@@ -68,8 +68,10 @@ if(EMSCRIPTEN)
 endif()
 
 #------------------------------------------------------------------------------
-# FIND SDL
+# FIND SDL (not needed for NDS)
 #------------------------------------------------------------------------------
+
+if(NOT NDS)
 
 # If SDL3_DIR wasn't specified, discover if the user put some prebuilt SDL3
 # package in the 'extern' directory
@@ -110,13 +112,15 @@ else()
 	unset(_sdl3_relpath)
 endif()
 
+endif() # NOT NDS
+
 #------------------------------------------------------------------------------
 # DEPENDENCIES
 #------------------------------------------------------------------------------
 
 add_subdirectory(extern/Pomme)
 
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+if(NOT EMSCRIPTEN AND NOT ANDROID AND NOT NDS)
 	find_package(OpenGL REQUIRED)
 endif()
 
@@ -145,6 +149,9 @@ endif()
 # Android requires a shared library; all other platforms use an executable
 if(ANDROID)
 	add_library(${GAME_TARGET} SHARED ${GAME_SOURCES})
+elseif(NDS)
+	add_executable(${GAME_TARGET} ${GAME_SOURCES})
+	target_compile_definitions(${GAME_TARGET} PRIVATE NDS)
 else()
 	add_executable(${GAME_TARGET} ${GAME_SOURCES})
 endif()
@@ -261,21 +268,25 @@ if(SANITIZE)
 	target_link_libraries(${GAME_TARGET} PRIVATE asan ubsan)
 endif()
 
-# Explicitly link math lib on Linux
-if(NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT ANDROID)
+# Explicitly link math lib on Linux (not needed for NDS - linked via libnds)
+if(NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT ANDROID AND NOT NDS)
 	target_link_libraries(${GAME_TARGET} PRIVATE m)
 endif()
 
-# Link SDL
+# Link SDL (not needed for NDS)
+if(NOT NDS)
 if(NOT SDL_STATIC)
 	target_link_libraries(${GAME_TARGET} PRIVATE SDL3::SDL3)
 else()
 	target_link_libraries(${GAME_TARGET} PRIVATE SDL3::SDL3-static)
 endif()
+endif()
 
 # Link core dependencies
-# OpenGL not needed for Emscripten (WebGL via -sLEGACY_GL_EMULATION) or Android (OpenGL ES via SDL)
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+# OpenGL not needed for Emscripten (WebGL via -sLEGACY_GL_EMULATION), Android (OpenGL ES via SDL), or NDS (videoGL via libnds)
+if(NDS)
+	target_link_libraries(${GAME_TARGET} PRIVATE Pomme nds9 fat)
+elseif(NOT EMSCRIPTEN AND NOT ANDROID)
 	target_link_libraries(${GAME_TARGET} PRIVATE Pomme OpenGL::GL)
 else()
 	target_link_libraries(${GAME_TARGET} PRIVATE Pomme)

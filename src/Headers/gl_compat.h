@@ -1,13 +1,21 @@
 //
 // gl_compat.h
-// OpenGL compatibility layer - wraps legacy OpenGL calls for WebGL
+// OpenGL compatibility layer - wraps legacy OpenGL calls for WebGL and NDS
 //
 
 #pragma once
 
+#ifdef NDS
+// Nintendo DS compatibility layer
+// NDS uses videoGL from libnds which provides an OpenGL 1.x-like API
+// with fixed-point math. The nds_gl_compat.h header provides macro
+// redirections that map standard OpenGL calls to NDS equivalents.
+#include "nds_gl_compat.h"
+
+#elif defined(__EMSCRIPTEN__)
+
 #include <SDL3/SDL_opengl.h>
 
-#ifdef __EMSCRIPTEN__
 #include "modern_gl.h"
 #include "vertex_array_compat.h"
 #include "state_compat.h"
@@ -47,4 +55,7 @@
 // GL_FOG_HINT calls are guarded with #ifndef __EMSCRIPTEN__ in the source code
 // instead of a macro, to avoid conflicting with the GLES2/gl2.h declaration.
 
-#endif // __EMSCRIPTEN__
+#else
+// Desktop/Android builds use standard OpenGL headers
+#include <SDL3/SDL_opengl.h>
+#endif // NDS / __EMSCRIPTEN__

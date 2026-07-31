@@ -1,0 +1,141 @@
+#---------------------------------------------------------------------------------
+# OttoMatic Nintendo DS Homebrew Makefile
+#
+# Requires devkitARM from devkitPro:
+#   https://devkitpro.org/
+#
+# Set DEVKITPRO and DEVKITARM environment variables before building.
+# Example:
+#   export DEVKITPRO=/opt/devkitpro
+#   export DEVKITARM=$DEVKITPRO/devkitARM
+#   make -f Makefile.nds
+#---------------------------------------------------------------------------------
+
+ifeq ($(strip $(DEVKITARM)),)
+$(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM")
+endif
+
+include $(DEVKITARM)/ds_rules
+
+#---------------------------------------------------------------------------------
+# TARGET is the name of the output
+# BUILD is the directory where object files & intermediate files will be placed
+# SOURCES is a list of directories containing source code
+# INCLUDES is a list of directories containing extra header files
+# DATA is a list of directories containing binary files
+# GRAPHICS is a list of directories containing image files to be converted with grit
+#---------------------------------------------------------------------------------
+TARGET      := OttoMatic
+BUILD       := build_nds
+SOURCES     := src/3D src/System src/Player src/Effects src/Enemies \
+               src/Enemies/Farm src/Enemies/FireIce src/Enemies/Jungle \
+               src/Enemies/Slime src/Enemies/Cloud src/Enemies/Apocalypse \
+               src/Items src/Screens src/Skeleton src/Terrain \
+               extern/Pomme/src
+INCLUDES    := src/Headers extern/Pomme/src
+DATA        :=
+GRAPHICS    :=
+
+#---------------------------------------------------------------------------------
+# options for code generation
+#---------------------------------------------------------------------------------
+ARCH    := -mthumb -mthumb-interwork
+
+CFLAGS  := -g -Wall -O2 \
+           -march=armv5te -mtune=arm946e-s -fomit-frame-pointer \
+           -ffast-math \
+           -DNDS \
+           -DPOMME_CASE_SENSITIVE_FSSPEC=1 \
+           -DPOMME_NO_GRAPHICS=1 \
+           -DPOMME_NO_INPUT=1 \
+           -DPOMME_NO_MP3=1 \
+           -DPOMME_NO_QD3D=1 \
+           -DPOMME_NO_VIDEO=1 \
+           $(ARCH)
+
+CFLAGS  += $(INCLUDE) -I$(DEVKITPRO)/libnds/include
+
+CXXFLAGS := $(CFLAGS) -std=gnu++20 -fno-rtti -fexceptions \
+            -Wno-multichar -Wno-unknown-pragmas -Wno-unused-parameter
+
+ASFLAGS := -g $(ARCH)
+
+LDFLAGS  = -specs=ds_arm9.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+
+#---------------------------------------------------------------------------------
+# list of directories containing libraries, this must be the top level containing
+# include and lib
+#---------------------------------------------------------------------------------
+LIBDIRS := $(LIBNDS)
+
+#---------------------------------------------------------------------------------
+# any extra libraries we wish to link with the project
+#---------------------------------------------------------------------------------
+LIBS    := -lfat -lnds9 -lm
+
+#---------------------------------------------------------------------------------
+# no real need to edit anything past this point unless you need to add additional
+# rules for different file extensions
+#---------------------------------------------------------------------------------
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+#---------------------------------------------------------------------------------
+
+export OUTPUT   := $(CURDIR)/$(TARGET)
+export VPATH    := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
+                   $(foreach dir,$(DATA),$(CURDIR)/$(dir))
+
+export DEPSDIR  := $(CURDIR)/$(BUILD)
+
+# Source file lists
+CFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(CURDIR)/$(dir)/*.c)))
+CPPFILES    := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(CURDIR)/$(dir)/*.cpp)))
+SFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(CURDIR)/$(dir)/*.s)))
+BINFILES    := $(foreach dir,$(DATA),$(notdir $(wildcard $(CURDIR)/$(dir)/*.*)))
+
+# Use CXX for linking
+export LD   := $(CXX)
+
+export OFILES   := $(addsuffix .o,$(BINFILES)) \
+                   $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
+
+export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
+                   $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+                   -I$(CURDIR)/$(BUILD)
+
+export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+
+.PHONY: $(BUILD) clean
+
+#---------------------------------------------------------------------------------
+$(BUILD):
+	@[ -d $@ ] || mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile.nds
+
+#---------------------------------------------------------------------------------
+clean:
+	@echo clean ...
+	@rm -fr $(BUILD) $(TARGET).elf $(TARGET).nds $(TARGET).arm9
+
+#---------------------------------------------------------------------------------
+else
+
+DEPENDS := $(OFILES:.o=.d)
+
+#---------------------------------------------------------------------------------
+# main targets
+#---------------------------------------------------------------------------------
+$(OUTPUT).nds   : $(OUTPUT).arm9
+$(OUTPUT).arm9  : $(OUTPUT).elf
+$(OUTPUT).elf   : $(OFILES)
+
+#---------------------------------------------------------------------------------
+%.bin.o : %.bin
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	@$(bin2o)
+
+-include $(DEPENDS)
+
+#---------------------------------------------------------------------------------
+endif
+#---------------------------------------------------------------------------------

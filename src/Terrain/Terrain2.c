@@ -331,6 +331,14 @@ Boolean			flag;
 			DoFatalAlert("Illegal Map Item Type!");
 		}
 
+			/* NDS: DENSITY REDUCTION - SKIP NON-ESSENTIAL ITEMS */
+
+		{
+			int densityCat = NDS_GetDensityCategory(type);
+			if (!NDS_ShouldSpawnItem(densityCat, startIndex + i))
+				continue;
+		}
+
 		flag = gTerrainItemAddRoutines[type](&itemPtr[i],itemPtr[i].x, itemPtr[i].y); // call item's ADD routine
 		if (flag)
 			itemPtr[i].flags |= ITEM_FLAGS_INUSE;				// set in-use flag

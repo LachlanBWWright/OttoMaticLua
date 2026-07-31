@@ -2,8 +2,12 @@
 // (C) 2025 Iliyas Jorio
 // This file is part of Otto Matic. https://github.com/jorio/ottomatic
 
+#ifdef NDS
+#include "nds_compat.h"
+#else
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -17,7 +21,11 @@ extern "C"
 {
 	#include "game.h"
 
+#ifndef NDS
 	SDL_Window* gSDLWindow = nullptr;
+#else
+	SDL_Window* gSDLWindow = NULL;
+#endif
 	FSSpec gDataSpec;
 	int gCurrentAntialiasingLevel;
 
@@ -217,6 +225,34 @@ static void ParseLevelEditorArgs(int argc, char** argv)
 
 static void Boot(int argc, char** argv)
 {
+#ifdef NDS
+	// Nintendo DS boot sequence
+	(void)argc; (void)argv;
+
+	iprintf("Otto Matic NDS - Booting...\n");
+
+	// Initialize FAT filesystem for reading game data from the cartridge
+	fatInitDefault();
+
+	// Initialize NDS graphics hardware
+	NDS_InitGraphics();
+
+	// Initialize input
+	scanKeys();
+
+	// Start our "machine"
+	iprintf("Boot: Pomme::Init...\n");
+	Pomme::Init();
+
+	// Find game data - on NDS this is on the FAT filesystem
+	fs::path dataPath = FindGameData(NULL);
+
+	// Load game prefs
+	iprintf("Boot: LoadPrefs...\n");
+	LoadPrefs();
+
+	iprintf("Boot: complete\n");
+#else
 	SDL_SetAppMetadata(GAME_FULL_NAME, GAME_VERSION, GAME_IDENTIFIER);
 	// Always use verbose logging on Emscripten for browser console visibility
 #ifdef __EMSCRIPTEN__
@@ -306,10 +342,14 @@ retryVideo:
 	{
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, GAME_FULL_NAME, "Couldn't load gamecontrollerdb.txt!", gSDLWindow);
 	}
+#endif // NDS
 }
 
 static void Shutdown()
 {
+#ifdef NDS
+	Pomme::Shutdown();
+#else
 	// Always restore the user's mouse acceleration before exiting.
 	SetMacLinearMouse(false);
 
@@ -322,6 +362,7 @@ static void Shutdown()
 	}
 
 	SDL_Quit();
+#endif
 }
 
 int main(int argc, char** argv)
@@ -357,8 +398,14 @@ int main(int argc, char** argv)
 
 	if (!success)
 	{
+#ifdef NDS
+		iprintf("Uncaught exception: %s\n", uncaught.c_str());
+		// Halt on NDS - user needs to power cycle
+		while(1) { swiWaitForVBlank(); }
+#else
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Uncaught exception: %s", uncaught.c_str());
 		SDL_ShowSimpleMessageBox(0, GAME_FULL_NAME, uncaught.c_str(), nullptr);
+#endif
 	}
 
 	return success ? 0 : 1;
