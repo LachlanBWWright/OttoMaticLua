@@ -284,6 +284,7 @@ static void PlayArea(void)
 		gDrawCallsThisFrame = 0;		// reset per-frame profiling counters
 		gVerticesThisFrame = 0;
 		gBufferUploadsThisFrame = 0;
+		NDS_ResetFrameStats();			// reset NDS performance counters
 
 		UpdateInput();									// read local keys
 
@@ -488,7 +489,11 @@ DeformationType		defData;
 	OGL_NewViewDef(&viewDef);
 
 	viewDef.camera.hither 			= 50;
+#ifdef NDS
+	viewDef.camera.yon 				= (NDS_SUPERTILE_ACTIVE_RANGE * SUPERTILE_SIZE * TERRAIN_POLYGON_SIZE) * .95f;
+#else
 	viewDef.camera.yon 				= (SUPERTILE_ACTIVE_RANGE * SUPERTILE_SIZE * TERRAIN_POLYGON_SIZE) * .95f;
+#endif
 	viewDef.camera.fov 				= GAME_FOV;
 
 
@@ -778,6 +783,12 @@ DeformationType		defData;
 		gAutoFadeEndDist *= .85f;
 	}
 
+#ifdef NDS
+	/* NDS: Aggressively reduce draw/fade distances to stay within poly budget */
+	gAutoFadeStartDist *= .50f;
+	gAutoFadeEndDist *= .55f;
+#endif
+
 	gAutoFadeRange_Frac	= 1.0f / (gAutoFadeEndDist - gAutoFadeStartDist);
 
 	if (gAutoFadeStartDist != 0.0f)
@@ -1040,6 +1051,7 @@ void GameMain(void)
 	InitBG3DManager();
 	SDL_Log("GameMain: InitObjectManager...");
 	InitObjectManager();
+	NDS_InitPerformanceSystem();							// init NDS performance systems
 	GAME_YIELD_BROWSER();		// yield to browser during long init
 	SDL_Log("GameMain: InitWindowStuff...");
 	InitWindowStuff();

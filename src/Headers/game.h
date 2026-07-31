@@ -81,6 +81,9 @@ extern "C"
 #include "tga.h"
 #include "menu.h"
 
+// NDS performance optimization systems
+#include "nds_performance.h"
+
 // WebGL compatibility layer (must be included after other headers)
 #include "gl_compat.h"
 
